@@ -6,19 +6,21 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val LightColorScheme = lightColorScheme(
-    primary = PrimaryBlue,
+private val AppleLightColorScheme = lightColorScheme(
+    primary = SystemBlue,
     onPrimary = Color.White,
-    primaryContainer = PrimaryContainerBlue,
-    onPrimaryContainer = Color(0xFFCADCFF),
-    background = BackgroundLight,
-    onBackground = OnBackgroundDark,
-    surface = BackgroundLight,
-    onSurface = OnBackgroundDark,
-    surfaceVariant = SurfaceContainer,
-    onSurfaceVariant = OnSurfaceVariant,
-    outline = Outline,
-    outlineVariant = OutlineVariant
+    primaryContainer = SystemBlueLight,
+    onPrimaryContainer = SystemBlueDark,
+    background = SystemGroupedBackground,
+    onBackground = SystemLabelPrimary,
+    surface = SystemSurface,
+    onSurface = SystemLabelPrimary,
+    surfaceVariant = SystemGroupedBackground,
+    onSurfaceVariant = SystemLabelSecondary,
+    outline = SystemGray,
+    outlineVariant = SystemDivider,
+    error = SystemRed,
+    onError = Color.White
 )
 
 @Composable
@@ -27,7 +29,8 @@ fun TaskFlowTheme(
     content: @Composable () -> Unit
 ) {
     MaterialTheme(
-        colorScheme = LightColorScheme,
+        colorScheme = AppleLightColorScheme,
         content = content
     )
 }
+

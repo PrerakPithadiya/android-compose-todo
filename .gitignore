@@ -11,5 +11,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+node_modules/
+package.json
+package-lock.json
+
 
 
