@@ -1,19 +1,73 @@
 package com.example.todo_list
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.example.todo_list.notification.TaskNotificationScheduler
+import com.example.todo_list.security.AppLockManager
 import com.example.todo_list.ui.screens.HomeScreen
+import com.example.todo_list.ui.screens.lock.AppLockAuthScreen
+import com.example.todo_list.ui.theme.AppAccentColor
 import com.example.todo_list.ui.theme.TaskFlowTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        TaskNotificationScheduler.createNotificationChannel(this)
+
+        // Initialize persistent App Lock state
+        AppLockManager.initialize(this)
+
+        // Monitor activity lifecycle to lock app when backgrounded or reopened from recents
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    AppLockManager.onAppBackgrounded()
+                }
+                Lifecycle.Event.ON_START -> {
+                    AppLockManager.onAppForegrounded()
+                }
+                else -> Unit
+            }
+        }
+        lifecycle.addObserver(lifecycleObserver)
+
         setContent {
-            TaskFlowTheme {
-                HomeScreen()
+            var themeMode by remember { mutableIntStateOf(0) } // 0: System, 1: Light, 2: Dark
+            var selectedAccent by remember { mutableStateOf(AppAccentColor.BLUE) }
+            val isDark = when (themeMode) {
+                1 -> false
+                2 -> true
+                else -> isSystemInDarkTheme()
+            }
+            TaskFlowTheme(darkTheme = isDark, accentColor = selectedAccent) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Main application content
+                    HomeScreen(
+                        themeMode = themeMode,
+                        onThemeModeChange = { themeMode = it },
+                        accentColor = selectedAccent,
+                        onAccentColorChange = { selectedAccent = it }
+                    )
+
+                    // Gatekeeper App Lock Overlay (Requires passcode or fingerprint to continue)
+                    if (AppLockManager.isLocked) {
+                        AppLockAuthScreen()
+                    }
+                }
             }
         }
     }

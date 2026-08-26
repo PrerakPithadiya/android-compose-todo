@@ -50,21 +50,60 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.todo_list.model.TaskItem
+import com.example.todo_list.model.TaskListCategory
 import com.example.todo_list.ui.theme.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import com.example.todo_list.notification.TaskNotificationScheduler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    themeMode: Int = 0,
+    onThemeModeChange: (Int) -> Unit = {},
+    accentColor: AppAccentColor = AppAccentColor.BLUE,
+    onAccentColorChange: (AppAccentColor) -> Unit = {}
+) {
+    val context = LocalContext.current
+
+    // Request notification permission launcher for Android 13+
+    var hasNotificationPermission by remember {
+        mutableStateOf(
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotificationPermission = isGranted
+    }
+
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
+            permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     var selectedTab by remember { mutableStateOf(0) }
     var showAddTaskSheet by remember { mutableStateOf(false) }
     var showViewAllSheet by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<TaskItem?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    var categoriesList by remember { mutableStateOf(TaskListCategory.DEFAULT_CATEGORIES) }
 
     val todayEpoch = System.currentTimeMillis() / (1000 * 60 * 60 * 24)
 
@@ -81,6 +120,39 @@ fun HomeScreen() {
                 TaskItem("6", "Evening gym session", "Health", "Today", "07:30 PM", false, todayEpoch)
             )
         )
+    }
+
+    val onToggleCompleteHelper = { toggledTask: TaskItem ->
+        taskList = taskList.map {
+            if (it.id == toggledTask.id) {
+                val updated = it.copy(isCompleted = !it.isCompleted)
+                if (updated.isCompleted) {
+                    TaskNotificationScheduler.cancel(context, updated)
+                } else {
+                    TaskNotificationScheduler.schedule(context, updated)
+                }
+                updated
+            } else it
+        }
+    }
+
+    val onDeleteHelper = { deletedTask: TaskItem ->
+        TaskNotificationScheduler.cancel(context, deletedTask)
+        taskList = taskList.filter { it.id != deletedTask.id }
+    }
+
+    val onTaskCreatedHelper = { newTask: TaskItem ->
+        taskList = taskList + newTask
+        TaskNotificationScheduler.schedule(context, newTask)
+    }
+
+    val onTaskUpdatedHelper = { updatedTask: TaskItem ->
+        taskList = taskList.map { if (it.id == updatedTask.id) updatedTask else it }
+        if (updatedTask.isCompleted) {
+            TaskNotificationScheduler.cancel(context, updatedTask)
+        } else {
+            TaskNotificationScheduler.schedule(context, updatedTask)
+        }
     }
 
     // Sort tasks: Pending first (chronologically), Completed tasks at bottom automatically
@@ -196,17 +268,11 @@ fun HomeScreen() {
                                         TaskCardItem(
                                             task = task,
                                             showDivider = index < filteredTaskList.size - 1,
-                                            onToggleComplete = { toggledTask ->
-                                                taskList = taskList.map {
-                                                    if (it.id == toggledTask.id) it.copy(isCompleted = !it.isCompleted) else it
-                                                }
-                                            },
+                                            onToggleComplete = onToggleCompleteHelper,
                                             onEditTask = { taskToEdit ->
                                                 editingTask = taskToEdit
                                             },
-                                            onDelete = { deletedTask ->
-                                                taskList = taskList.filter { it.id != deletedTask.id }
-                                            }
+                                            onDelete = onDeleteHelper
                                         )
                                     }
                                 }
@@ -217,21 +283,43 @@ fun HomeScreen() {
             }
             1 -> CalendarScreen(
                 taskList = taskList,
-                onToggleComplete = { toggledTask ->
-                    taskList = taskList.map {
-                        if (it.id == toggledTask.id) it.copy(isCompleted = !it.isCompleted) else it
-                    }
-                },
+                onToggleComplete = onToggleCompleteHelper,
                 onEditTask = { taskToEdit ->
                     editingTask = taskToEdit
                 },
-                onDeleteTask = { deletedTask ->
-                    taskList = taskList.filter { it.id != deletedTask.id }
-                },
+                onDeleteTask = onDeleteHelper,
                 onAddTaskClick = { showAddTaskSheet = true }
             )
-            2 -> PlaceholderScreen(title = "Lists", icon = Icons.Outlined.Category)
-            3 -> PlaceholderScreen(title = "Settings", icon = Icons.Outlined.Settings)
+            2 -> ListsScreen(
+                taskList = taskList,
+                categoriesList = categoriesList,
+                onToggleComplete = onToggleCompleteHelper,
+                onEditTask = { taskToEdit -> editingTask = taskToEdit },
+                onDeleteTask = onDeleteHelper,
+                onTaskCreated = onTaskCreatedHelper,
+                onCreateCategory = { newCategory ->
+                    categoriesList = categoriesList + newCategory
+                },
+                onDeleteCategory = { categoryToDelete ->
+                    categoriesList = categoriesList.filter { it.id != categoryToDelete.id }
+                },
+                onOpenAddTaskSheet = { prefilledCategory ->
+                    showAddTaskSheet = true
+                }
+            )
+            3 -> SettingsScreen(
+                taskList = taskList,
+                themeMode = themeMode,
+                onThemeModeChange = onThemeModeChange,
+                accentColor = accentColor,
+                onAccentColorChange = onAccentColorChange,
+                onClearCompletedTasks = {
+                    taskList = taskList.filter { !it.isCompleted }
+                },
+                onResetAllData = {
+                    taskList = emptyList()
+                }
+            )
         }
     }
 
@@ -241,7 +329,7 @@ fun HomeScreen() {
         CreateTaskBottomSheet(
             onDismiss = { showAddTaskSheet = false },
             onTaskCreated = { newTask ->
-                taskList = taskList + newTask
+                onTaskCreatedHelper(newTask)
                 showAddTaskSheet = false
                 coroutineScope.launch {
                     listState.animateScrollToItem(0)
@@ -256,11 +344,11 @@ fun HomeScreen() {
             task = taskToEdit,
             onDismiss = { editingTask = null },
             onTaskUpdated = { updatedTask ->
-                taskList = taskList.map { if (it.id == updatedTask.id) updatedTask else it }
+                onTaskUpdatedHelper(updatedTask)
                 editingTask = null
             },
             onDeleteTask = { taskToDelete ->
-                taskList = taskList.filter { it.id != taskToDelete.id }
+                onDeleteHelper(taskToDelete)
                 editingTask = null
             }
         )
@@ -271,17 +359,11 @@ fun HomeScreen() {
         AllTasksBottomSheet(
             taskList = sortedTaskList,
             onDismiss = { showViewAllSheet = false },
-            onToggleComplete = { toggledTask ->
-                taskList = taskList.map {
-                    if (it.id == toggledTask.id) it.copy(isCompleted = !it.isCompleted) else it
-                }
-            },
+            onToggleComplete = onToggleCompleteHelper,
             onEditTask = { taskToEdit ->
                 editingTask = taskToEdit
             },
-            onDelete = { deletedTask ->
-                taskList = taskList.filter { it.id != deletedTask.id }
-            },
+            onDelete = onDeleteHelper,
             onAddNewTask = {
                 showViewAllSheet = false
                 showAddTaskSheet = true

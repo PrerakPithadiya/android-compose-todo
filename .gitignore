@@ -8,6 +8,8 @@
 .DS_Store
 /build
 /captures
+screenshots/
+app_screenshots/
 .externalNativeBuild
 .cxx
 local.properties
