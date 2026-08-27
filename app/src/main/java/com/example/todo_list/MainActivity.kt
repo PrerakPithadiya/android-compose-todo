@@ -31,6 +31,9 @@ class MainActivity : FragmentActivity() {
         // Initialize persistent App Lock state
         AppLockManager.initialize(this)
 
+        // Initialize persistent User Profile state
+        com.example.todo_list.manager.UserProfileManager.initialize(this)
+
         // Initialize persistent Haptics state
         com.example.todo_list.utils.HapticManager.initialize(this)
 

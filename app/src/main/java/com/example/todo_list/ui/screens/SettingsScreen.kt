@@ -64,14 +64,16 @@ fun SettingsScreen(
     accentColor: AppAccentColor = AppAccentColor.BLUE,
     onAccentColorChange: (AppAccentColor) -> Unit = {},
     onClearCompletedTasks: () -> Unit,
-    onResetAllData: () -> Unit
+    onResetAllData: () -> Unit,
+    onOpenProfile: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
-    // Account state
-    var userName by remember { mutableStateOf("Prerak Pithadiya") }
-    var userEmail by remember { mutableStateOf("prerak@taskflow.app") }
-    var userTier by remember { mutableStateOf("TaskFlow Pro") }
+    // Reactive Profile state from UserProfileManager
+    val userProfile = com.example.todo_list.manager.UserProfileManager.profile
+    val userName = userProfile.name
+    val userEmail = userProfile.email
+    val userTier = userProfile.userTier
 
     // Categories state
     var showManageCategoriesSheet by remember { mutableStateOf(false) }
@@ -136,7 +138,7 @@ fun SettingsScreen(
                     userEmail = userEmail,
                     userTier = userTier,
                     accentColor = SystemBlue,
-                    onClick = { showEditProfileSheet = true }
+                    onClick = { onOpenProfile() }
                 )
             }
 
@@ -465,63 +467,11 @@ fun SettingsScreen(
 
     // Modal Sheet 1: Edit Profile Sheet
     if (showEditProfileSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showEditProfileSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = SystemSurface,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    text = "Edit Profile",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SystemLabelPrimary
-                )
-
-                OutlinedTextField(
-                    value = userName,
-                    onValueChange = { userName = it },
-                    label = { Text("Display Name") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SystemBlue,
-                        unfocusedBorderColor = SystemDivider
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = userEmail,
-                    onValueChange = { userEmail = it },
-                    label = { Text("Email Address") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SystemBlue,
-                        unfocusedBorderColor = SystemDivider
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Button(
-                    onClick = {
-                        showEditProfileSheet = false
-                        Toast.makeText(context, "Profile updated successfully", Toast.LENGTH_SHORT).show()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text("Save Changes", fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-        }
+        com.example.todo_list.ui.screens.profile.EditProfileBottomSheet(
+            profile = userProfile,
+            onDismiss = { showEditProfileSheet = false },
+            onProfileSaved = {}
+        )
     }
 
     // Modal Sheet 2: Select Default Category
@@ -1085,7 +1035,7 @@ fun UserProfileCard(
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             AsyncImage(
-                model = "https://lh3.googleusercontent.com/aida-public/AB6AXuCoBuvdtAGCYMF3-7fgZnTDoXh_snzGoLq1GpOuiTnpGcrs_BUFGcSioVrt4viicVuGC9ZFj9lsxuXEX_szLOWSsdMaaKlMDlKGSJJcfKhyUthyTuHEgIgtHGDUcLm3JMsUS7KQWaovaJxSOD24Pd9PJg9MrXyDZLwQHIBQ2P-6aUTKoBr9ebkyIWiEcuxV_wt95LmVK_nmu9kMlfXd-pio3PZqk-2_pF6npzfw8BXNvJ6lIacTKXE",
+                model = com.example.todo_list.manager.UserProfileManager.getAvatarUrl(),
                 contentDescription = "User Avatar",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

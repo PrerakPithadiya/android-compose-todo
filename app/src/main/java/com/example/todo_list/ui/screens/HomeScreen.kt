@@ -60,8 +60,10 @@ import java.util.Locale
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
+import com.example.todo_list.manager.UserProfileManager
 import com.example.todo_list.notification.TaskNotificationScheduler
 import com.example.todo_list.ui.components.CreateCategoryBottomSheet
+import com.example.todo_list.ui.screens.profile.ProfileScreen
 import com.example.todo_list.utils.HapticManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,6 +103,9 @@ fun HomeScreen(
     }
 
     var selectedTab by remember { mutableStateOf(0) }
+    var showProfileScreen by remember { mutableStateOf(false) }
+    val userProfile = UserProfileManager.profile
+    val avatarUrl = UserProfileManager.getAvatarUrl()
     var showAddTaskSheet by remember { mutableStateOf(false) }
     var showViewAllSheet by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<TaskItem?>(null) }
@@ -132,6 +137,7 @@ fun HomeScreen(
                     val updated = it.copy(isCompleted = !it.isCompleted)
                     if (updated.isCompleted) {
                         TaskNotificationScheduler.cancel(context, updated)
+                        UserProfileManager.addXp(50)
                     } else {
                         TaskNotificationScheduler.schedule(context, updated)
                     }
@@ -190,16 +196,25 @@ fun HomeScreen(
     val remainingTasks = remember(totalTasks, completedTasks) { totalTasks - completedTasks }
     val progressRatio = remember(totalTasks, completedTasks) { if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f }
 
-    Scaffold(
-        topBar = {
-            if (selectedTab == 0) {
-                HeaderBar(
-                    searchQuery = searchQuery,
-                    onSearchQueryChange = { searchQuery = it },
-                    onAddTaskClick = { showAddTaskSheet = true }
-                )
-            }
-        },
+    if (showProfileScreen) {
+        ProfileScreen(
+            taskList = taskList,
+            categoriesList = categoriesList,
+            onNavigateBack = { showProfileScreen = false }
+        )
+    } else {
+        Scaffold(
+            topBar = {
+                if (selectedTab == 0) {
+                    HeaderBar(
+                        avatarUrl = avatarUrl,
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = { searchQuery = it },
+                        onAddTaskClick = { showAddTaskSheet = true },
+                        onProfileClick = { showProfileScreen = true }
+                    )
+                }
+            },
         floatingActionButton = {
             if (selectedTab == 0) {
                 FloatingActionButton(
@@ -363,9 +378,13 @@ fun HomeScreen(
                 },
                 onResetAllData = {
                     taskList = emptyList()
+                },
+                onOpenProfile = {
+                    showProfileScreen = true
                 }
             )
         }
+    }
     }
 
 
@@ -434,9 +453,11 @@ fun HomeScreen(
 
 @Composable
 fun HeaderBar(
+    avatarUrl: String = UserProfileManager.getAvatarUrl(),
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
-    onAddTaskClick: () -> Unit
+    onAddTaskClick: () -> Unit,
+    onProfileClick: () -> Unit = {}
 ) {
     Surface(
         color = SystemSurface.copy(alpha = 0.95f),
@@ -486,13 +507,17 @@ fun HeaderBar(
                     }
 
                     AsyncImage(
-                        model = "https://lh3.googleusercontent.com/aida-public/AB6AXuCoBuvdtAGCYMF3-7fgZnTDoXh_snzGoLq1GpOuiTnpGcrs_BUFGcSioVrt4viicVuGC9ZFj9lsxuXEX_szLOWSsdMaaKlMDlKGSJJcfKhyUthyTuHEgIgtHGDUcLm3JMsUS7KQWaovaJxSOD24Pd9PJg9MrXyDZLwQHIBQ2P-6aUTKoBr9ebkyIWiEcuxV_wt95LmVK_nmu9kMlfXd-pio3PZqk-2_pF6npzfw8BXNvJ6lIacTKXE",
+                        model = avatarUrl,
                         contentDescription = "User Avatar",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
                             .border(0.5.dp, SystemDivider, CircleShape)
+                            .clickable {
+                                HapticManager.performClick(context)
+                                onProfileClick()
+                            }
                     )
                 }
             }
