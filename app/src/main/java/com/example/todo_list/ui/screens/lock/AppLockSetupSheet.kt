@@ -227,6 +227,7 @@ fun AppLockSetupSheet(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clickable {
+                                                    com.example.todo_list.utils.HapticManager.performClick(context)
                                                     selectedType = type
                                                     firstSecret = ""
                                                     secondSecret = ""

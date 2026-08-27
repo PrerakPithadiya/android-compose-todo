@@ -31,6 +31,12 @@ class MainActivity : FragmentActivity() {
         // Initialize persistent App Lock state
         AppLockManager.initialize(this)
 
+        // Initialize persistent Haptics state
+        com.example.todo_list.utils.HapticManager.initialize(this)
+
+        // Enforce 120Hz high refresh rate display mode & prevent OS throttling
+        com.example.todo_list.utils.HighRefreshRateManager.enableHighRefreshRate(this)
+
         // Monitor activity lifecycle to lock app when backgrounded or reopened from recents
         val lifecycleObserver = LifecycleEventObserver { _, event ->
             when (event) {
@@ -39,6 +45,9 @@ class MainActivity : FragmentActivity() {
                 }
                 Lifecycle.Event.ON_START -> {
                     AppLockManager.onAppForegrounded()
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    com.example.todo_list.utils.HighRefreshRateManager.onResume(this)
                 }
                 else -> Unit
             }

@@ -64,6 +64,26 @@ fun PatternLockView(
     val activeColor = if (isError) SystemRed else accentColor
     val inactiveColor = SystemGray2.copy(alpha = 0.6f)
 
+    val nodeCentersCache = remember { Array(9) { Offset.Zero } }
+    var cachedWidth by remember { mutableFloatStateOf(0f) }
+    var cachedHeight by remember { mutableFloatStateOf(0f) }
+
+    fun updateCenters(width: Float, height: Float) {
+        if (width <= 0f || height <= 0f || (width == cachedWidth && height == cachedHeight)) return
+        cachedWidth = width
+        cachedHeight = height
+        val stepX = width / 3f
+        val stepY = height / 3f
+        var idx = 0
+        for (row in 0..2) {
+            for (col in 0..2) {
+                val cx = (col + 0.5f) * stepX
+                val cy = (row + 0.5f) * stepY
+                nodeCentersCache[idx++] = Offset(cx, cy)
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -80,16 +100,27 @@ fun PatternLockView(
                 .aspectRatio(1f)
                 .pointerInput(enabled) {
                     if (!enabled) return@pointerInput
+                    val canvasWidth = size.width.toFloat()
+                    val canvasHeight = size.height.toFloat()
+                    updateCenters(canvasWidth, canvasHeight)
+
                     detectDragGestures(
                         onDragStart = { offset ->
                             selectedNodes = emptyList()
-                            val nodeRadius = size.width / 6f
+                            val nodeRadius = canvasWidth / 6f
                             val hitRadius = nodeRadius * 0.85f
 
-                            val nodeCenters = getNodeCenters(size.width.toFloat(), size.height.toFloat())
-                            val hitIndex = nodeCenters.indexOfFirst { center ->
-                                hypot((offset.x - center.x).toDouble(), (offset.y - center.y).toDouble()) <= hitRadius
+                            var hitIndex = -1
+                            for (i in 0 until 9) {
+                                val center = nodeCentersCache[i]
+                                val dx = offset.x - center.x
+                                val dy = offset.y - center.y
+                                if ((dx * dx + dy * dy) <= (hitRadius * hitRadius)) {
+                                    hitIndex = i
+                                    break
+                                }
                             }
+
                             if (hitIndex != -1) {
                                 selectedNodes = listOf(hitIndex)
                                 currentTouchPoint = offset
@@ -101,12 +132,18 @@ fun PatternLockView(
                             val offset = change.position
                             currentTouchPoint = offset
 
-                            val nodeRadius = size.width / 6f
+                            val nodeRadius = canvasWidth / 6f
                             val hitRadius = nodeRadius * 0.85f
-                            val nodeCenters = getNodeCenters(size.width.toFloat(), size.height.toFloat())
 
-                            val hitIndex = nodeCenters.indexOfFirst { center ->
-                                hypot((offset.x - center.x).toDouble(), (offset.y - center.y).toDouble()) <= hitRadius
+                            var hitIndex = -1
+                            for (i in 0 until 9) {
+                                val center = nodeCentersCache[i]
+                                val dx = offset.x - center.x
+                                val dy = offset.y - center.y
+                                if ((dx * dx + dy * dy) <= (hitRadius * hitRadius)) {
+                                    hitIndex = i
+                                    break
+                                }
                             }
 
                             if (hitIndex != -1 && !selectedNodes.contains(hitIndex)) {
@@ -127,7 +164,8 @@ fun PatternLockView(
                     )
                 }
         ) {
-            val nodeCenters = getNodeCenters(size.width, size.height)
+            updateCenters(size.width, size.height)
+
             val strokeWidthPx = 5.dp.toPx()
             val outerRadiusPx = 28.dp.toPx()
             val dotRadiusPx = 7.dp.toPx()
@@ -135,10 +173,10 @@ fun PatternLockView(
             // 1. Draw Connecting Lines between Selected Nodes
             if (selectedNodes.isNotEmpty()) {
                 val linePath = Path().apply {
-                    val firstCenter = nodeCenters[selectedNodes.first()]
+                    val firstCenter = nodeCentersCache[selectedNodes.first()]
                     moveTo(firstCenter.x, firstCenter.y)
                     for (i in 1 until selectedNodes.size) {
-                        val nextCenter = nodeCenters[selectedNodes[i]]
+                        val nextCenter = nodeCentersCache[selectedNodes[i]]
                         lineTo(nextCenter.x, nextCenter.y)
                     }
                 }
@@ -155,7 +193,7 @@ fun PatternLockView(
 
                 // 2. Draw line from last selected node to active finger drag position
                 currentTouchPoint?.let { touchPos ->
-                    val lastCenter = nodeCenters[selectedNodes.last()]
+                    val lastCenter = nodeCentersCache[selectedNodes.last()]
                     drawLine(
                         color = activeColor.copy(alpha = 0.7f),
                         start = lastCenter,
@@ -167,7 +205,8 @@ fun PatternLockView(
             }
 
             // 3. Draw 3x3 Nodes
-            nodeCenters.forEachIndexed { index, center ->
+            for (index in 0 until 9) {
+                val center = nodeCentersCache[index]
                 val isSelected = selectedNodes.contains(index)
 
                 if (isSelected) {
@@ -201,19 +240,4 @@ fun PatternLockView(
             }
         }
     }
-}
-
-private fun getNodeCenters(width: Float, height: Float): List<Offset> {
-    val stepX = width / 3f
-    val stepY = height / 3f
-    val centers = ArrayList<Offset>(9)
-
-    for (row in 0..2) {
-        for (col in 0..2) {
-            val cx = (col + 0.5f) * stepX
-            val cy = (row + 0.5f) * stepY
-            centers.add(Offset(cx, cy))
-        }
-    }
-    return centers
 }

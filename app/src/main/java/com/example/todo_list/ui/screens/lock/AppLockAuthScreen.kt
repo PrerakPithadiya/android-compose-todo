@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material3.*
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +34,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.todo_list.security.AppLockManager
 import com.example.todo_list.security.BiometricAuthHelper
 import com.example.todo_list.security.LockType
@@ -48,6 +53,7 @@ fun AppLockAuthScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? FragmentActivity
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     // Intercept hardware/gesture back press to prevent bypassing lock screen
     BackHandler(enabled = true) {
@@ -65,38 +71,54 @@ fun AppLockAuthScreen(
     val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
-    val triggerBiometricPrompt = {
-        if (activity != null && AppLockManager.isBiometricEnabled) {
-            BiometricAuthHelper.promptBiometric(
-                activity = activity,
-                title = "Unlock TaskFlow",
-                subtitle = "Touch fingerprint sensor to continue",
-                negativeButtonText = "Use Passcode",
-                onSuccess = {
-                    AppLockManager.unlock()
-                },
-                onError = { err ->
-                    // user can continue with PIN/pattern/password
-                }
-            )
+    val triggerBiometricPrompt: () -> Unit = remember(activity) {
+        {
+            if (activity != null && AppLockManager.isBiometricEnabled) {
+                BiometricAuthHelper.promptBiometric(
+                    activity = activity,
+                    title = "Unlock TaskFlow",
+                    subtitle = "Touch fingerprint sensor to continue",
+                    negativeButtonText = "Use Passcode",
+                    onSuccess = {
+                        AppLockManager.unlock()
+                    },
+                    onError = { _ ->
+                        // Fallback to manual passcode entry
+                    }
+                )
+            }
         }
     }
 
-    // Auto-trigger biometric prompt on screen appearance if biometric is enabled
-    LaunchedEffect(Unit) {
+    // Direct launch: Trigger fingerprint authentication immediately upon opening / resuming
+    DisposableEffect(lifecycleOwner, AppLockManager.isBiometricEnabled) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && AppLockManager.isBiometricEnabled) {
+                triggerBiometricPrompt()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(AppLockManager.isBiometricEnabled) {
         if (AppLockManager.isBiometricEnabled) {
-            delay(150)
+            delay(100)
             triggerBiometricPrompt()
         }
     }
 
     val onValidateSecret = { secretToVerify: String ->
         if (AppLockManager.verifySecret(secretToVerify)) {
+            com.example.todo_list.utils.HapticManager.performSuccess(context)
             isError = false
             enteredPin = ""
             enteredPassword = ""
             AppLockManager.unlock()
         } else {
+            com.example.todo_list.utils.HapticManager.performError(context)
             isError = true
             attemptCount++
             errorMessage = "Incorrect ${lockType.displayName}. Try again."
@@ -165,37 +187,6 @@ fun AppLockAuthScreen(
                     color = SystemLabelSecondary
                 )
 
-                // Quick Fingerprint Unlock Button if enabled
-                if (AppLockManager.isBiometricEnabled) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = SystemBlue.copy(alpha = 0.12f),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable { triggerBiometricPrompt() }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Fingerprint,
-                                contentDescription = "Fingerprint",
-                                tint = SystemBlue,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Scan Fingerprint",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = SystemBlue
-                            )
-                        }
-                    }
-                }
-
                 // Error Prompt
                 AnimatedVisibility(
                     visible = isError,
@@ -228,7 +219,7 @@ fun AppLockAuthScreen(
                             accentColor = SystemBlue
                         )
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(28.dp))
 
                         IosKeypad(
                             onDigitClick = { digit ->
@@ -245,6 +236,7 @@ fun AppLockAuthScreen(
                                     enteredPin = enteredPin.dropLast(1)
                                 }
                             },
+                            onBiometricClick = if (AppLockManager.isBiometricEnabled) triggerBiometricPrompt else null,
                             onCancelClick = null
                         )
                     }
@@ -262,7 +254,30 @@ fun AppLockAuthScreen(
                             isError = isError,
                             accentColor = SystemBlue
                         )
-                        Spacer(modifier = Modifier.height(32.dp))
+
+                        if (AppLockManager.isBiometricEnabled) {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .background(SystemBlue.copy(alpha = 0.12f))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = ripple(bounded = true, color = SystemBlue.copy(alpha = 0.3f)),
+                                        onClick = triggerBiometricPrompt
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Fingerprint,
+                                    contentDescription = "Scan Fingerprint",
+                                    tint = SystemBlue,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
 
@@ -271,7 +286,7 @@ fun AppLockAuthScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 60.dp),
+                            .padding(bottom = 40.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         OutlinedTextField(
@@ -316,26 +331,54 @@ fun AppLockAuthScreen(
                             shape = RoundedCornerShape(12.dp)
                         )
 
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                if (enteredPassword.isNotEmpty()) {
-                                    onValidateSecret(enteredPassword)
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            enabled = enteredPassword.isNotEmpty()
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Unlock App",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
+                            if (AppLockManager.isBiometricEnabled) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(50.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(SystemBlue.copy(alpha = 0.12f))
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = ripple(bounded = true, color = SystemBlue.copy(alpha = 0.3f)),
+                                            onClick = triggerBiometricPrompt
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Fingerprint,
+                                        contentDescription = "Scan Fingerprint",
+                                        tint = SystemBlue,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    if (enteredPassword.isNotEmpty()) {
+                                        onValidateSecret(enteredPassword)
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = enteredPassword.isNotEmpty()
+                            ) {
+                                Text(
+                                    text = "Unlock App",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
                 }

@@ -61,6 +61,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import com.example.todo_list.notification.TaskNotificationScheduler
+import com.example.todo_list.ui.components.CreateCategoryBottomSheet
+import com.example.todo_list.utils.HapticManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +106,7 @@ fun HomeScreen(
     var editingTask by remember { mutableStateOf<TaskItem?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var categoriesList by remember { mutableStateOf(TaskListCategory.DEFAULT_CATEGORIES) }
+    var prefilledTaskCategory by remember { mutableStateOf<String?>(null) }
 
     val todayEpoch = System.currentTimeMillis() / (1000 * 60 * 60 * 24)
 
@@ -122,36 +125,44 @@ fun HomeScreen(
         )
     }
 
-    val onToggleCompleteHelper = { toggledTask: TaskItem ->
-        taskList = taskList.map {
-            if (it.id == toggledTask.id) {
-                val updated = it.copy(isCompleted = !it.isCompleted)
-                if (updated.isCompleted) {
-                    TaskNotificationScheduler.cancel(context, updated)
-                } else {
-                    TaskNotificationScheduler.schedule(context, updated)
-                }
-                updated
-            } else it
+    val onToggleCompleteHelper: (TaskItem) -> Unit = remember(context) {
+        { toggledTask: TaskItem ->
+            taskList = taskList.map {
+                if (it.id == toggledTask.id) {
+                    val updated = it.copy(isCompleted = !it.isCompleted)
+                    if (updated.isCompleted) {
+                        TaskNotificationScheduler.cancel(context, updated)
+                    } else {
+                        TaskNotificationScheduler.schedule(context, updated)
+                    }
+                    updated
+                } else it
+            }
         }
     }
 
-    val onDeleteHelper = { deletedTask: TaskItem ->
-        TaskNotificationScheduler.cancel(context, deletedTask)
-        taskList = taskList.filter { it.id != deletedTask.id }
+    val onDeleteHelper: (TaskItem) -> Unit = remember(context) {
+        { deletedTask: TaskItem ->
+            TaskNotificationScheduler.cancel(context, deletedTask)
+            taskList = taskList.filter { it.id != deletedTask.id }
+        }
     }
 
-    val onTaskCreatedHelper = { newTask: TaskItem ->
-        taskList = taskList + newTask
-        TaskNotificationScheduler.schedule(context, newTask)
+    val onTaskCreatedHelper: (TaskItem) -> Unit = remember(context) {
+        { newTask: TaskItem ->
+            taskList = taskList + newTask
+            TaskNotificationScheduler.schedule(context, newTask)
+        }
     }
 
-    val onTaskUpdatedHelper = { updatedTask: TaskItem ->
-        taskList = taskList.map { if (it.id == updatedTask.id) updatedTask else it }
-        if (updatedTask.isCompleted) {
-            TaskNotificationScheduler.cancel(context, updatedTask)
-        } else {
-            TaskNotificationScheduler.schedule(context, updatedTask)
+    val onTaskUpdatedHelper: (TaskItem) -> Unit = remember(context) {
+        { updatedTask: TaskItem ->
+            taskList = taskList.map { if (it.id == updatedTask.id) updatedTask else it }
+            if (updatedTask.isCompleted) {
+                TaskNotificationScheduler.cancel(context, updatedTask)
+            } else {
+                TaskNotificationScheduler.schedule(context, updatedTask)
+            }
         }
     }
 
@@ -174,10 +185,10 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    val totalTasks = sortedTaskList.size
-    val completedTasks = sortedTaskList.count { it.isCompleted }
-    val remainingTasks = totalTasks - completedTasks
-    val progressRatio = if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f
+    val totalTasks = remember(sortedTaskList) { sortedTaskList.size }
+    val completedTasks = remember(sortedTaskList) { sortedTaskList.count { it.isCompleted } }
+    val remainingTasks = remember(totalTasks, completedTasks) { totalTasks - completedTasks }
+    val progressRatio = remember(totalTasks, completedTasks) { if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f }
 
     Scaffold(
         topBar = {
@@ -192,7 +203,10 @@ fun HomeScreen(
         floatingActionButton = {
             if (selectedTab == 0) {
                 FloatingActionButton(
-                    onClick = { showAddTaskSheet = true },
+                    onClick = {
+                        HapticManager.performClick(context)
+                        showAddTaskSheet = true
+                    },
                     containerColor = SystemBlue,
                     contentColor = Color.White,
                     shape = CircleShape,
@@ -227,21 +241,21 @@ fun HomeScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    item {
+                    item(key = "status_bento") {
                         StatusBentoCard(
                             remainingTasks = remainingTasks,
                             progressRatio = progressRatio
                         )
                     }
 
-                    item {
+                    item(key = "todays_tasks_header") {
                         TodaysTasksHeader(
                             totalCount = filteredTaskList.size,
                             onViewAllClick = { showViewAllSheet = true }
                         )
                     }
 
-                    item {
+                    item(key = "tasks_grouped_card") {
                         // iOS Inset Grouped List Card
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -265,15 +279,17 @@ fun HomeScreen(
                                     }
                                 } else {
                                     filteredTaskList.forEachIndexed { index, task ->
-                                        TaskCardItem(
-                                            task = task,
-                                            showDivider = index < filteredTaskList.size - 1,
-                                            onToggleComplete = onToggleCompleteHelper,
-                                            onEditTask = { taskToEdit ->
-                                                editingTask = taskToEdit
-                                            },
-                                            onDelete = onDeleteHelper
-                                        )
+                                        key(task.id) {
+                                            TaskCardItem(
+                                                task = task,
+                                                showDivider = index < filteredTaskList.size - 1,
+                                                onToggleComplete = onToggleCompleteHelper,
+                                                onEditTask = { taskToEdit ->
+                                                    editingTask = taskToEdit
+                                                },
+                                                onDelete = onDeleteHelper
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -283,12 +299,16 @@ fun HomeScreen(
             }
             1 -> CalendarScreen(
                 taskList = taskList,
+                categoriesList = categoriesList,
                 onToggleComplete = onToggleCompleteHelper,
                 onEditTask = { taskToEdit ->
                     editingTask = taskToEdit
                 },
                 onDeleteTask = onDeleteHelper,
-                onAddTaskClick = { showAddTaskSheet = true }
+                onAddTaskClick = {
+                    prefilledTaskCategory = null
+                    showAddTaskSheet = true
+                }
             )
             2 -> ListsScreen(
                 taskList = taskList,
@@ -303,12 +323,37 @@ fun HomeScreen(
                 onDeleteCategory = { categoryToDelete ->
                     categoriesList = categoriesList.filter { it.id != categoryToDelete.id }
                 },
+                onDeleteCategoryWithMigration = { categoryToDelete, targetCategoryName ->
+                    taskList = taskList.map { task ->
+                        if (task.category.equals(categoryToDelete.name, ignoreCase = true)) {
+                            task.copy(category = targetCategoryName)
+                        } else {
+                            task
+                        }
+                    }
+                    categoriesList = categoriesList.filter { it.id != categoryToDelete.id }
+                },
                 onOpenAddTaskSheet = { prefilledCategory ->
+                    prefilledTaskCategory = prefilledCategory
                     showAddTaskSheet = true
                 }
             )
             3 -> SettingsScreen(
                 taskList = taskList,
+                categoriesList = categoriesList,
+                onCreateCategory = { newCategory ->
+                    categoriesList = categoriesList + newCategory
+                },
+                onDeleteCategoryWithMigration = { categoryToDelete, targetCategoryName ->
+                    taskList = taskList.map { task ->
+                        if (task.category.equals(categoryToDelete.name, ignoreCase = true)) {
+                            task.copy(category = targetCategoryName)
+                        } else {
+                            task
+                        }
+                    }
+                    categoriesList = categoriesList.filter { it.id != categoryToDelete.id }
+                },
                 themeMode = themeMode,
                 onThemeModeChange = onThemeModeChange,
                 accentColor = accentColor,
@@ -327,10 +372,19 @@ fun HomeScreen(
     // Modern Create Task Bottom Sheet
     if (showAddTaskSheet) {
         CreateTaskBottomSheet(
-            onDismiss = { showAddTaskSheet = false },
+            initialCategory = prefilledTaskCategory ?: "Work",
+            categoriesList = categoriesList,
+            onCreateCategory = { newCategory ->
+                categoriesList = categoriesList + newCategory
+            },
+            onDismiss = {
+                showAddTaskSheet = false
+                prefilledTaskCategory = null
+            },
             onTaskCreated = { newTask ->
                 onTaskCreatedHelper(newTask)
                 showAddTaskSheet = false
+                prefilledTaskCategory = null
                 coroutineScope.launch {
                     listState.animateScrollToItem(0)
                 }
@@ -342,6 +396,10 @@ fun HomeScreen(
     editingTask?.let { taskToEdit ->
         EditTaskBottomSheet(
             task = taskToEdit,
+            categoriesList = categoriesList,
+            onCreateCategory = { newCategory ->
+                categoriesList = categoriesList + newCategory
+            },
             onDismiss = { editingTask = null },
             onTaskUpdated = { updatedTask ->
                 onTaskUpdatedHelper(updatedTask)
@@ -358,6 +416,7 @@ fun HomeScreen(
     if (showViewAllSheet) {
         AllTasksBottomSheet(
             taskList = sortedTaskList,
+            categoriesList = categoriesList,
             onDismiss = { showViewAllSheet = false },
             onToggleComplete = onToggleCompleteHelper,
             onEditTask = { taskToEdit ->
@@ -366,6 +425,7 @@ fun HomeScreen(
             onDelete = onDeleteHelper,
             onAddNewTask = {
                 showViewAllSheet = false
+                prefilledTaskCategory = null
                 showAddTaskSheet = true
             }
         )
@@ -409,8 +469,12 @@ fun HeaderBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    val context = LocalContext.current
                     IconButton(
-                        onClick = onAddTaskClick,
+                        onClick = {
+                            HapticManager.performClick(context)
+                            onAddTaskClick()
+                        },
                         modifier = Modifier.size(36.dp)
                     ) {
                         Icon(
@@ -441,6 +505,7 @@ fun HeaderBar(
                     .fillMaxWidth()
                     .height(38.dp)
             ) {
+                val context = LocalContext.current
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(horizontal = 10.dp)
@@ -473,7 +538,10 @@ fun HeaderBar(
                     }
                     if (searchQuery.isNotEmpty()) {
                         IconButton(
-                            onClick = { onSearchQueryChange("") },
+                            onClick = {
+                                HapticManager.performClick(context)
+                                onSearchQueryChange("")
+                            },
                             modifier = Modifier.size(20.dp)
                         ) {
                             Icon(
@@ -711,6 +779,7 @@ fun IosCircularCheckbox(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -722,7 +791,14 @@ fun IosCircularCheckbox(
                 color = if (checked) Color.Transparent else SystemGray2,
                 shape = CircleShape
             )
-            .clickable { onCheckedChange(!checked) }
+            .clickable {
+                if (!checked) {
+                    HapticManager.performSuccess(context)
+                } else {
+                    HapticManager.performClick(context)
+                }
+                onCheckedChange(!checked)
+            }
     ) {
         if (checked) {
             Icon(
@@ -735,11 +811,12 @@ fun IosCircularCheckbox(
     }
 }
 
-// "View All" Sheet with ALL Categories (Work, Personal, Health, Study)
+// "View All" Sheet with Dynamic Categories
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AllTasksBottomSheet(
     taskList: List<TaskItem>,
+    categoriesList: List<TaskListCategory> = TaskListCategory.DEFAULT_CATEGORIES,
     onDismiss: () -> Unit,
     onToggleComplete: (TaskItem) -> Unit,
     onEditTask: (TaskItem) -> Unit,
@@ -749,17 +826,18 @@ fun AllTasksBottomSheet(
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("All") }
 
+    val filterOptions = remember(categoriesList) {
+        listOf("All", "Pending", "Completed") + categoriesList.map { it.name }
+    }
+
     val filteredList = taskList.filter { task ->
         val matchesSearch = task.title.contains(searchQuery, ignoreCase = true) ||
                 task.category.contains(searchQuery, ignoreCase = true)
         val matchesFilter = when (selectedFilter) {
+            "All" -> true
             "Pending" -> !task.isCompleted
             "Completed" -> task.isCompleted
-            "Work" -> task.category.equals("Work", ignoreCase = true)
-            "Personal" -> task.category.equals("Personal", ignoreCase = true)
-            "Health" -> task.category.equals("Health", ignoreCase = true)
-            "Study" -> task.category.equals("Study", ignoreCase = true)
-            else -> true
+            else -> task.category.equals(selectedFilter, ignoreCase = true)
         }
         matchesSearch && matchesFilter
     }
@@ -840,7 +918,6 @@ fun AllTasksBottomSheet(
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
             ) {
-                val filterOptions = listOf("All", "Pending", "Completed", "Work", "Personal", "Health", "Study")
                 filterOptions.forEach { option ->
                     val isSelected = selectedFilter == option
                     FilterChip(
@@ -1055,13 +1132,17 @@ fun MaterialDatePickerDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateTaskBottomSheet(
+    initialCategory: String = "Work",
+    categoriesList: List<TaskListCategory> = TaskListCategory.DEFAULT_CATEGORIES,
+    onCreateCategory: (TaskListCategory) -> Unit = {},
     onDismiss: () -> Unit,
     onTaskCreated: (TaskItem) -> Unit
 ) {
+    val context = LocalContext.current
     val currentEpochDay = remember { System.currentTimeMillis() / (1000 * 60 * 60 * 24) }
 
     var taskTitle by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("Work") }
+    var selectedCategory by remember { mutableStateOf(initialCategory) }
     var selectedDate by remember { mutableStateOf("Today") }
     var selectedEpochDay by remember { mutableStateOf(currentEpochDay) }
     var selectedTime by remember { mutableStateOf("05:00 PM") }
@@ -1069,9 +1150,20 @@ fun CreateTaskBottomSheet(
 
     var showAnalogClock by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showCreateCategorySheet by remember { mutableStateOf(false) }
 
     val quickTimes = listOf("09:00 AM", "11:30 AM", "02:00 PM", "05:00 PM", "08:00 PM")
-    val categories = listOf("Work" to "💼", "Personal" to "👤", "Health" to "🏋️", "Study" to "📚")
+
+    if (showCreateCategorySheet) {
+        CreateCategoryBottomSheet(
+            onDismiss = { showCreateCategorySheet = false },
+            onCreateCategory = { newCategory ->
+                onCreateCategory(newCategory)
+                selectedCategory = newCategory.name
+                showCreateCategorySheet = false
+            }
+        )
+    }
 
     if (showAnalogClock) {
         AnalogClockPickerDialog(
@@ -1191,33 +1283,69 @@ fun CreateTaskBottomSheet(
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
                 ) {
-                    categories.forEach { (cat, emoji) ->
-                        val isSelected = selectedCategory == cat
+                    categoriesList.forEach { catItem ->
+                        val isSelected = selectedCategory.equals(catItem.name, ignoreCase = true)
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = if (isSelected) SystemBlue else SystemSurface,
                             border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, SystemDivider),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(16.dp))
-                                .clickable { selectedCategory = cat }
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    selectedCategory = catItem.name
+                                }
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                             ) {
-                                Text(emoji, fontSize = 14.sp)
+                                Text(catItem.getEmoji(), fontSize = 14.sp)
                                 Text(
-                                    text = cat,
+                                    text = catItem.name,
                                     fontSize = 13.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     color = if (isSelected) Color.White else SystemLabelPrimary
                                 )
                             }
+                        }
+                    }
+
+                    // + New Category Chip Button
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = SystemBlue.copy(alpha = 0.08f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SystemBlue.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable {
+                                HapticManager.performClick(context)
+                                showCreateCategorySheet = true
+                            }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "New Category",
+                                tint = SystemBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "New Category",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SystemBlue
+                            )
                         }
                     }
                 }
@@ -1429,10 +1557,13 @@ fun CreateTaskBottomSheet(
 @Composable
 fun EditTaskBottomSheet(
     task: TaskItem,
+    categoriesList: List<TaskListCategory> = TaskListCategory.DEFAULT_CATEGORIES,
+    onCreateCategory: (TaskListCategory) -> Unit = {},
     onDismiss: () -> Unit,
     onTaskUpdated: (TaskItem) -> Unit,
     onDeleteTask: (TaskItem) -> Unit
 ) {
+    val context = LocalContext.current
     val currentEpochDay = remember { System.currentTimeMillis() / (1000 * 60 * 60 * 24) }
 
     var taskTitle by remember { mutableStateOf(task.title) }
@@ -1444,9 +1575,20 @@ fun EditTaskBottomSheet(
 
     var showAnalogClock by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showCreateCategorySheet by remember { mutableStateOf(false) }
 
     val quickTimes = listOf("09:00 AM", "11:30 AM", "02:00 PM", "05:00 PM", "08:00 PM")
-    val categories = listOf("Work" to "💼", "Personal" to "👤", "Health" to "🏋️", "Study" to "📚")
+
+    if (showCreateCategorySheet) {
+        CreateCategoryBottomSheet(
+            onDismiss = { showCreateCategorySheet = false },
+            onCreateCategory = { newCategory ->
+                onCreateCategory(newCategory)
+                selectedCategory = newCategory.name
+                showCreateCategorySheet = false
+            }
+        )
+    }
 
     if (showAnalogClock) {
         AnalogClockPickerDialog(
@@ -1586,33 +1728,69 @@ fun EditTaskBottomSheet(
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
                 ) {
-                    categories.forEach { (cat, emoji) ->
-                        val isSelected = selectedCategory == cat
+                    categoriesList.forEach { catItem ->
+                        val isSelected = selectedCategory.equals(catItem.name, ignoreCase = true)
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = if (isSelected) SystemBlue else SystemSurface,
                             border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, SystemDivider),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(16.dp))
-                                .clickable { selectedCategory = cat }
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    selectedCategory = catItem.name
+                                }
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                             ) {
-                                Text(emoji, fontSize = 14.sp)
+                                Text(catItem.getEmoji(), fontSize = 14.sp)
                                 Text(
-                                    text = cat,
+                                    text = catItem.name,
                                     fontSize = 13.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                     color = if (isSelected) Color.White else SystemLabelPrimary
                                 )
                             }
+                        }
+                    }
+
+                    // + New Category Chip Button
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = SystemBlue.copy(alpha = 0.08f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SystemBlue.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable {
+                                HapticManager.performClick(context)
+                                showCreateCategorySheet = true
+                            }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "New Category",
+                                tint = SystemBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "New Category",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SystemBlue
+                            )
                         }
                     }
                 }
@@ -1907,6 +2085,7 @@ fun NavItem(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val activeColor = SystemBlue
     val inactiveColor = SystemGray
 
@@ -1915,7 +2094,10 @@ fun NavItem(
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
             .clip(CircleShape)
-            .clickable { onClick() }
+            .clickable {
+                HapticManager.performClick(context)
+                onClick()
+            }
             .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
         Icon(

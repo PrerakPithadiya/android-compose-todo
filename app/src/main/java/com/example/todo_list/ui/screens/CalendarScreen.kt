@@ -30,8 +30,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import com.example.todo_list.model.TaskItem
+import com.example.todo_list.model.TaskListCategory
 import com.example.todo_list.ui.theme.*
+import com.example.todo_list.utils.HapticManager
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -40,6 +43,7 @@ import java.util.Locale
 @Composable
 fun CalendarScreen(
     taskList: List<TaskItem>,
+    categoriesList: List<TaskListCategory> = TaskListCategory.DEFAULT_CATEGORIES,
     onToggleComplete: (TaskItem) -> Unit,
     onEditTask: (TaskItem) -> Unit,
     onDeleteTask: (TaskItem) -> Unit,
@@ -63,6 +67,11 @@ fun CalendarScreen(
 
     val monthFormat = remember { SimpleDateFormat("MMMM yyyy", Locale.getDefault()) }
     val shortMonthFormat = remember { SimpleDateFormat("MMM", Locale.getDefault()) }
+    val dayFormat = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
+
+    val currentMonthTitle = remember(selectedCalendar) { shortMonthFormat.format(selectedCalendar.time) }
+    val fullMonthTitle = remember(selectedCalendar) { monthFormat.format(selectedCalendar.time).uppercase() }
+    val selectedDayTitle = remember(selectedCalendar) { dayFormat.format(selectedCalendar.time) }
 
     // Filter AND SORT tasks for selected date & category
     // Completed tasks move automatically to the bottom (isCompleted = true comes after isCompleted = false)
@@ -86,6 +95,8 @@ fun CalendarScreen(
             .sortedWith(compareBy<TaskItem> { it.isCompleted }.thenBy { it.getSortValue() })
     }
 
+    val context = LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -93,7 +104,7 @@ fun CalendarScreen(
     ) {
         // Sticky Apple Glass Header (with statusBarsPadding to avoid camera cutout overlap on S24 FE & all phones)
         CalendarHeaderBar(
-            currentMonthTitle = shortMonthFormat.format(selectedCalendar.time),
+            currentMonthTitle = currentMonthTitle,
             viewMode = viewMode,
             onViewModeChange = { viewMode = it },
             onTodayClick = {
@@ -104,10 +115,10 @@ fun CalendarScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 100.dp)
+            contentPadding = PaddingValues(bottom = 96.dp)
         ) {
-            // Month/Week Navigation Header & Title
-            item {
+            // Header Month / Week Title with Next/Prev Arrows
+            item(key = "calendar_month_nav_row") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -116,7 +127,7 @@ fun CalendarScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = monthFormat.format(selectedCalendar.time).uppercase(),
+                        text = fullMonthTitle,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = SystemLabelSecondary,
@@ -125,6 +136,7 @@ fun CalendarScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         IconButton(
                             onClick = {
+                                HapticManager.performClick(context)
                                 selectedCalendar = (selectedCalendar.clone() as Calendar).apply {
                                     if (viewMode == 1) {
                                         // Week view: Slide to previous 7 days
@@ -145,6 +157,7 @@ fun CalendarScreen(
                         }
                         IconButton(
                             onClick = {
+                                HapticManager.performClick(context)
                                 selectedCalendar = (selectedCalendar.clone() as Calendar).apply {
                                     if (viewMode == 1) {
                                         // Week view: Slide to next 7 days
@@ -168,7 +181,7 @@ fun CalendarScreen(
             }
 
             // Interactive Calendar View Switcher
-            item {
+            item(key = "calendar_view_switcher") {
                 AnimatedContent(
                     targetState = viewMode,
                     transitionSpec = {
@@ -216,15 +229,16 @@ fun CalendarScreen(
             }
 
             // Category Filter Pills
-            item {
+            item(key = "calendar_category_filter") {
                 CategoryFilterBar(
                     selectedCategory = selectedCategoryFilter,
+                    categoriesList = categoriesList,
                     onCategorySelected = { selectedCategoryFilter = it }
                 )
             }
 
             // Schedule Agenda Header
-            item {
+            item(key = "calendar_agenda_header") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -233,7 +247,7 @@ fun CalendarScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "SCHEDULE FOR ${SimpleDateFormat("MMM d", Locale.getDefault()).format(selectedCalendar.time).uppercase()}",
+                        text = "SCHEDULE FOR ${selectedDayTitle.uppercase()}",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = SystemLabelSecondary,
@@ -256,9 +270,9 @@ fun CalendarScreen(
 
             // Agenda List Cards (Completed tasks sorted to bottom automatically)
             if (tasksForSelectedDate.isEmpty()) {
-                item {
+                item(key = "calendar_empty_schedule") {
                     EmptyScheduleState(
-                        dateString = SimpleDateFormat("MMM d", Locale.getDefault()).format(selectedCalendar.time),
+                        dateString = selectedDayTitle,
                         onAddTaskClick = onAddTaskClick
                     )
                 }
@@ -296,6 +310,7 @@ fun CalendarHeaderBar(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
+            val context = LocalContext.current
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -307,7 +322,10 @@ fun CalendarHeaderBar(
                 Surface(
                     shape = RoundedCornerShape(100.dp),
                     color = SystemBlueLight,
-                    modifier = Modifier.clickable { onTodayClick() }
+                    modifier = Modifier.clickable {
+                        HapticManager.performClick(context)
+                        onTodayClick()
+                    }
                 ) {
                     Text(
                         text = "Today",
@@ -326,7 +344,10 @@ fun CalendarHeaderBar(
                 )
 
                 // Add Task Icon Button
-                IconButton(onClick = onAddTaskClick) {
+                IconButton(onClick = {
+                    HapticManager.performClick(context)
+                    onAddTaskClick()
+                }) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Add Task",
@@ -354,6 +375,7 @@ fun IosSegmentedControl(
     selectedIndex: Int,
     onOptionSelected: (Int) -> Unit
 ) {
+    val context = LocalContext.current
     Surface(
         shape = RoundedCornerShape(8.9.dp),
         color = SearchInputBackground,
@@ -374,7 +396,10 @@ fun IosSegmentedControl(
                         .then(
                             if (isSelected) Modifier.shadow(2.dp, RoundedCornerShape(6.9.dp)) else Modifier
                         )
-                        .clickable { onOptionSelected(index) }
+                        .clickable {
+                            HapticManager.performClick(context)
+                            onOptionSelected(index)
+                        }
                         .padding(horizontal = 10.dp, vertical = 5.dp)
                 ) {
                     Text(
@@ -472,6 +497,7 @@ fun MonthCalendarCard(
                     weekRow.forEach { dayInfo ->
                         val isToday = dayInfo.isCurrentMonth && curYear == todayYear && curMonth == todayMonth && dayInfo.dayNumber == todayDay
                         val isSelected = dayInfo.isCurrentMonth && dayInfo.dayNumber == selDay
+                        val context = LocalContext.current
 
                         Box(
                             modifier = Modifier
@@ -492,6 +518,7 @@ fun MonthCalendarCard(
                                     } else Modifier
                                 )
                                 .clickable(enabled = dayInfo.isCurrentMonth) {
+                                    HapticManager.performClick(context)
                                     onDateSelected(curYear, curMonth, dayInfo.dayNumber)
                                 },
                             contentAlignment = Alignment.Center
@@ -610,6 +637,7 @@ fun WeekCalendarStrip(
                 val isToday = yr == todayYear && mo == todayMonth && dy == todayDay
                 val isSelected = yr == curYear && mo == curMonth && dy == selDay
 
+                val context = LocalContext.current
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = when {
@@ -624,7 +652,10 @@ fun WeekCalendarStrip(
                     modifier = Modifier
                         .weight(1f) // FIX ISSUE 2: Weight = 1f ensures all 7 days fit 100% across the screen width without clipping!
                         .height(68.dp)
-                        .clickable { onDateSelected(yr, mo, dy) }
+                        .clickable {
+                            HapticManager.performClick(context)
+                            onDateSelected(yr, mo, dy)
+                        }
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -662,16 +693,20 @@ fun WeekCalendarStrip(
 @Composable
 fun CategoryFilterBar(
     selectedCategory: String,
+    categoriesList: List<TaskListCategory> = TaskListCategory.DEFAULT_CATEGORIES,
     onCategorySelected: (String) -> Unit
 ) {
-    val categories = listOf("All", "Work", "Personal", "Health", "Study")
+    val categories = remember(categoriesList) {
+        listOf("All") + categoriesList.map { it.name }
+    }
+    val context = LocalContext.current
 
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        items(categories) { category ->
+        items(categories, key = { it }) { category ->
             val isSelected = category.equals(selectedCategory, ignoreCase = true)
 
             Surface(
@@ -682,7 +717,10 @@ fun CategoryFilterBar(
                     if (isSelected) SystemBlue else SystemDivider
                 ),
                 shadowElevation = if (isSelected) 2.dp else 0.dp,
-                modifier = Modifier.clickable { onCategorySelected(category) }
+                modifier = Modifier.clickable {
+                    HapticManager.performClick(context)
+                    onCategorySelected(category)
+                }
             ) {
                 Text(
                     text = category,
@@ -704,6 +742,7 @@ fun CalendarTaskCardItem(
     onDeleteTask: (TaskItem) -> Unit
 ) {
     val categoryColor = getCategoryColor(task.category)
+    val context = LocalContext.current
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -713,7 +752,10 @@ fun CalendarTaskCardItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clickable { onEditTask(task) }
+            .clickable {
+                HapticManager.performClick(context)
+                onEditTask(task)
+            }
     ) {
         Row(
             modifier = Modifier
@@ -751,7 +793,14 @@ fun CalendarTaskCardItem(
                                 if (task.isCompleted) SystemBlue else SystemGray2,
                                 CircleShape
                             )
-                            .clickable { onToggleComplete(task) },
+                            .clickable {
+                                if (!task.isCompleted) {
+                                    HapticManager.performSuccess(context)
+                                } else {
+                                    HapticManager.performClick(context)
+                                }
+                                onToggleComplete(task)
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         if (task.isCompleted) {

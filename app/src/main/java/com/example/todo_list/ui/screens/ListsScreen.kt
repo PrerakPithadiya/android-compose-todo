@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,6 +37,9 @@ import androidx.compose.ui.unit.sp
 import com.example.todo_list.model.TaskItem
 import com.example.todo_list.model.TaskListCategory
 import com.example.todo_list.ui.theme.*
+import com.example.todo_list.ui.components.CreateCategoryBottomSheet
+import com.example.todo_list.ui.components.DeleteCategoryMigrationDialog
+import com.example.todo_list.utils.HapticManager
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,19 +52,22 @@ fun ListsScreen(
     onDeleteTask: (TaskItem) -> Unit,
     onTaskCreated: (TaskItem) -> Unit,
     onCreateCategory: (TaskListCategory) -> Unit,
-    onDeleteCategory: (TaskListCategory) -> Unit,
+    onDeleteCategory: (TaskListCategory) -> Unit = {},
+    onDeleteCategoryWithMigration: (TaskListCategory, String) -> Unit = { cat, _ -> onDeleteCategory(cat) },
     onOpenAddTaskSheet: (prefilledCategory: String) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategoryForDetail by remember { mutableStateOf<TaskListCategory?>(null) }
     var selectedSmartFilter by remember { mutableStateOf<String?>(null) } // "Today", "Scheduled", "All", "Completed"
     var showCreateListSheet by remember { mutableStateOf(false) }
+    var categoryPendingDelete by remember { mutableStateOf<TaskListCategory?>(null) }
+    var pendingMigrationFromCategory by remember { mutableStateOf<TaskListCategory?>(null) }
 
     // Aggregate metrics for Smart Summary Grid
-    val totalTaskCount = taskList.size
-    val todayTaskCount = taskList.count { it.date.equals("Today", ignoreCase = true) }
-    val scheduledTaskCount = taskList.count { !it.date.equals("Someday", ignoreCase = true) }
-    val completedTaskCount = taskList.count { it.isCompleted }
+    val totalTaskCount = remember(taskList) { taskList.size }
+    val todayTaskCount = remember(taskList) { taskList.count { it.date.equals("Today", ignoreCase = true) } }
+    val scheduledTaskCount = remember(taskList) { taskList.count { !it.date.equals("Someday", ignoreCase = true) } }
+    val completedTaskCount = remember(taskList) { taskList.count { it.isCompleted } }
 
     // Filter categories by search query
     val filteredCategories = remember(categoriesList, searchQuery) {
@@ -73,12 +80,28 @@ fun ListsScreen(
         }
     }
 
+    // Pre-aggregate category statistics to prevent O(N) list filtering during composition & scroll
+    val categoryStatsMap = remember(taskList, filteredCategories) {
+        filteredCategories.associate { category ->
+            val categoryTasks = taskList.filter {
+                it.category.equals(category.name, ignoreCase = true)
+            }
+            val active = categoryTasks.count { !it.isCompleted }
+            val completed = categoryTasks.count { it.isCompleted }
+            val total = categoryTasks.size
+            val ratio = if (total > 0) completed.toFloat() / total else 0f
+            category.id to Triple(active, total, ratio)
+        }
+    }
+
+    val context = LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(SystemGroupedBackground)
     ) {
-        // iOS Header Bar with Search & "+ List" button
+        // iOS Large Title Header Bar
         ListsHeaderBar(
             searchQuery = searchQuery,
             onSearchQueryChange = { searchQuery = it },
@@ -87,13 +110,18 @@ fun ListsScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 100.dp, start = 16.dp, end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = 12.dp,
+                bottom = 100.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Smart Summary Bento Grid (2x2)
-            item {
+            // Apple Reminders Bento Grid
+            item(key = "smart_summary_grid") {
                 Text(
-                    text = "SUMMARY",
+                    text = "PINNED LISTS",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = SystemLabelSecondary,
@@ -107,13 +135,14 @@ fun ListsScreen(
                     allCount = totalTaskCount,
                     completedCount = completedTaskCount,
                     onSelectFilter = { filter ->
+                        HapticManager.performClick(context)
                         selectedSmartFilter = filter
                     }
                 )
             }
 
             // My Lists Inset Grouped Section
-            item {
+            item(key = "my_lists_group") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -130,7 +159,10 @@ fun ListsScreen(
                     )
 
                     TextButton(
-                        onClick = { showCreateListSheet = true },
+                        onClick = {
+                            HapticManager.performClick(context)
+                            showCreateListSheet = true
+                        },
                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                     ) {
                         Icon(
@@ -172,27 +204,23 @@ fun ListsScreen(
                             }
                         } else {
                             filteredCategories.forEachIndexed { index, category ->
-                                val categoryTasks = taskList.filter {
-                                    it.category.equals(category.name, ignoreCase = true)
-                                }
-                                val activeCount = categoryTasks.count { !it.isCompleted }
-                                val completedCount = categoryTasks.count { it.isCompleted }
-                                val totalCatCount = categoryTasks.size
-                                val ratio = if (totalCatCount > 0) completedCount.toFloat() / totalCatCount else 0f
+                                key(category.id) {
+                                    val (activeCount, totalCatCount, ratio) = categoryStatsMap[category.id] ?: Triple(0, 0, 0f)
 
-                                CategoryListItemRow(
-                                    category = category,
-                                    activeCount = activeCount,
-                                    progressRatio = ratio,
-                                    totalCount = totalCatCount,
-                                    showDivider = index < filteredCategories.size - 1,
-                                    onClick = {
-                                        selectedCategoryForDetail = category
-                                    },
-                                    onDeleteCategory = {
-                                        onDeleteCategory(category)
-                                    }
-                                )
+                                    CategoryListItemRow(
+                                        category = category,
+                                        activeCount = activeCount,
+                                        progressRatio = ratio,
+                                        totalCount = totalCatCount,
+                                        showDivider = index < filteredCategories.size - 1,
+                                        onClick = {
+                                            selectedCategoryForDetail = category
+                                        },
+                                        onDeleteCategory = {
+                                            categoryPendingDelete = category
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -201,13 +229,43 @@ fun ListsScreen(
         }
     }
 
-    // Modal Sheet for Creating Custom List
+    // Modal Sheet for Creating Custom Category
     if (showCreateListSheet) {
-        CreateListBottomSheet(
-            onDismiss = { showCreateListSheet = false },
-            onCreateList = { newCategory ->
+        CreateCategoryBottomSheet(
+            onDismiss = {
+                showCreateListSheet = false
+                pendingMigrationFromCategory = null
+            },
+            onCreateCategory = { newCategory ->
                 onCreateCategory(newCategory)
                 showCreateListSheet = false
+                // If this was opened to create a migration destination:
+                pendingMigrationFromCategory?.let { fromCat ->
+                    onDeleteCategoryWithMigration(fromCat, newCategory.name)
+                    pendingMigrationFromCategory = null
+                }
+            }
+        )
+    }
+
+    // Modal Dialog for Category Deletion & Task Migration
+    categoryPendingDelete?.let { catToDelete ->
+        val affectedCount = taskList.count { it.category.equals(catToDelete.name, ignoreCase = true) }
+        val remainingCategories = categoriesList.filter { it.id != catToDelete.id }
+
+        DeleteCategoryMigrationDialog(
+            categoryToDelete = catToDelete,
+            affectedTasksCount = affectedCount,
+            availableCategories = remainingCategories,
+            onDismiss = { categoryPendingDelete = null },
+            onConfirmDeleteAndMigrate = { targetCategoryName ->
+                onDeleteCategoryWithMigration(catToDelete, targetCategoryName)
+                categoryPendingDelete = null
+            },
+            onRequestCreateNewCategory = {
+                pendingMigrationFromCategory = catToDelete
+                categoryPendingDelete = null
+                showCreateListSheet = true
             }
         )
     }
@@ -288,8 +346,12 @@ fun ListsHeaderBar(
                     letterSpacing = (-0.5).sp
                 )
 
+                val context = LocalContext.current
                 IconButton(
-                    onClick = onCreateListClick,
+                    onClick = {
+                        HapticManager.performClick(context)
+                        onCreateListClick()
+                    },
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
@@ -309,6 +371,7 @@ fun ListsHeaderBar(
                     .fillMaxWidth()
                     .height(38.dp)
             ) {
+                val context = LocalContext.current
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(horizontal = 10.dp)
@@ -341,7 +404,10 @@ fun ListsHeaderBar(
                     }
                     if (searchQuery.isNotEmpty()) {
                         IconButton(
-                            onClick = { onSearchQueryChange("") },
+                            onClick = {
+                                HapticManager.performClick(context)
+                                onSearchQueryChange("")
+                            },
                             modifier = Modifier.size(20.dp)
                         ) {
                             Icon(
@@ -430,12 +496,16 @@ fun SmartSummaryCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = SystemSurface,
         border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
         shadowElevation = 1.dp,
-        modifier = modifier.clickable { onClick() }
+        modifier = modifier.clickable {
+            HapticManager.performClick(context)
+            onClick()
+        }
     ) {
         Column(
             modifier = Modifier
@@ -494,12 +564,16 @@ fun CategoryListItemRow(
     onDeleteCategory: () -> Unit
 ) {
     val catColor = category.getColor()
+    val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onClick() }
+                .clickable {
+                    HapticManager.performClick(context)
+                    onClick()
+                }
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween

@@ -18,6 +18,34 @@ data class TaskListCategory(
         }
     }
 
+    fun getEmoji(): String {
+        return when (iconName.lowercase()) {
+            "work", "briefcase" -> "💼"
+            "personal", "person" -> "👤"
+            "health", "fitness" -> "🏋️"
+            "study", "book" -> "📚"
+            "shopping", "cart" -> "🛒"
+            "star" -> "⭐"
+            "flag" -> "🚩"
+            "heart" -> "❤️"
+            "home" -> "🏠"
+            "money", "finance" -> "💰"
+            "travel", "plane" -> "✈️"
+            "music" -> "🎵"
+            "code", "tech" -> "💻"
+            else -> when (name.lowercase()) {
+                "work" -> "💼"
+                "personal" -> "👤"
+                "health" -> "🏋️"
+                "study" -> "📚"
+                "shopping", "groceries" -> "🛒"
+                "home" -> "🏠"
+                "fitness" -> "🏋️"
+                else -> "📁"
+            }
+        }
+    }
+
     companion object {
         val DEFAULT_CATEGORIES = listOf(
             TaskListCategory("cat_work", "Work", "#007AFF", "Work", true),

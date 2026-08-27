@@ -15,8 +15,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
@@ -34,20 +36,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.foundation.lazy.items
 import com.example.todo_list.model.TaskItem
+import com.example.todo_list.model.TaskListCategory
 import com.example.todo_list.security.AppLockManager
 import com.example.todo_list.security.BiometricAuthHelper
 import com.example.todo_list.security.BiometricAvailability
 import com.example.todo_list.security.LockType
+import com.example.todo_list.ui.components.CreateCategoryBottomSheet
+import com.example.todo_list.ui.components.DeleteCategoryMigrationDialog
 import com.example.todo_list.ui.screens.lock.AppLockSetupSheet
 import com.example.todo_list.ui.screens.lock.SetupStep
 import com.example.todo_list.ui.theme.*
+import com.example.todo_list.utils.HapticIntensity
+import com.example.todo_list.utils.HapticManager
 import androidx.fragment.app.FragmentActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     taskList: List<TaskItem>,
+    categoriesList: List<TaskListCategory> = TaskListCategory.DEFAULT_CATEGORIES,
+    onCreateCategory: (TaskListCategory) -> Unit = {},
+    onDeleteCategoryWithMigration: (TaskListCategory, String) -> Unit = { _, _ -> },
     themeMode: Int = 0,
     onThemeModeChange: (Int) -> Unit = {},
     accentColor: AppAccentColor = AppAccentColor.BLUE,
@@ -62,11 +73,14 @@ fun SettingsScreen(
     var userEmail by remember { mutableStateOf("prerak@taskflow.app") }
     var userTier by remember { mutableStateOf("TaskFlow Pro") }
 
+    // Categories state
+    var showManageCategoriesSheet by remember { mutableStateOf(false) }
+    var showCreateCategorySheet by remember { mutableStateOf(false) }
+    var categoryPendingDelete by remember { mutableStateOf<TaskListCategory?>(null) }
+    var pendingMigrationFromCategory by remember { mutableStateOf<TaskListCategory?>(null) }
+
     // Preferences & Reminders state
     var notificationsEnabled by remember { mutableStateOf(true) }
-    var dailyDigestEnabled by remember { mutableStateOf(true) }
-    var dailyDigestTime by remember { mutableStateOf("08:00 AM") }
-    var hapticsEnabled by remember { mutableStateOf(true) }
     var defaultCategory by remember { mutableStateOf("Personal") }
     var defaultDueTime by remember { mutableStateOf("09:00 AM") }
     var autoArchiveOption by remember { mutableStateOf("After 7 Days") }
@@ -76,7 +90,6 @@ fun SettingsScreen(
     var compactModeEnabled by remember { mutableStateOf(false) }
 
     // Security & Data
-    var cloudSyncEnabled by remember { mutableStateOf(true) }
     var showAppLockSetupSheet by remember { mutableStateOf(false) }
     var appLockSetupStep by remember { mutableStateOf(SetupStep.SELECT_LOCK_TYPE) }
     var showLockTimeoutSheet by remember { mutableStateOf(false) }
@@ -90,9 +103,7 @@ fun SettingsScreen(
     var showAppIconSheet by remember { mutableStateOf(false) }
     var showClearCompletedDialog by remember { mutableStateOf(false) }
     var showResetDataDialog by remember { mutableStateOf(false) }
-    var showDesignTokensSheet by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
-    var showFeedbackSheet by remember { mutableStateOf(false) }
 
     val totalTasks = remember(taskList) { taskList.size }
     val completedCount = remember(taskList) { taskList.count { it.isCompleted } }
@@ -119,7 +130,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // 1. Profile / Account Card Header
-            item {
+            item(key = "settings_profile_card") {
                 UserProfileCard(
                     userName = userName,
                     userEmail = userEmail,
@@ -130,7 +141,7 @@ fun SettingsScreen(
             }
 
             // 2. Lifetime Productivity Statistics Summary Bento Card
-            item {
+            item(key = "settings_productivity_card") {
                 ProductivityStatsCard(
                     totalTasks = totalTasks,
                     completedCount = completedCount,
@@ -141,7 +152,7 @@ fun SettingsScreen(
             }
 
             // 3. Preferences & Reminders
-            item {
+            item(key = "settings_preferences_group") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SectionHeaderTitle(title = "PREFERENCES & REMINDERS")
                     SettingsGroupCard {
@@ -160,25 +171,53 @@ fun SettingsScreen(
                             showDivider = true
                         )
                         SettingsSwitchRow(
-                            icon = Icons.Outlined.Schedule,
-                            iconTint = ApplePersonal,
-                            title = "Daily Summary Digest",
-                            subtitle = "Summary at $dailyDigestTime",
-                            checked = dailyDigestEnabled,
-                            accentColor = SystemBlue,
-                            onCheckedChange = { dailyDigestEnabled = it },
-                            showDivider = true
-                        )
-                        SettingsSwitchRow(
                             icon = Icons.Outlined.Vibration,
                             iconTint = AppleHealth,
                             title = "Haptic Feedback",
-                            subtitle = "Tactile vibration on task completion",
-                            checked = hapticsEnabled,
+                            subtitle = if (HapticManager.isHapticsEnabled) {
+                                "Tactile vibration active on all buttons"
+                            } else {
+                                "Off — all vibrations muted"
+                            },
+                            checked = HapticManager.isHapticsEnabled,
                             accentColor = SystemBlue,
-                            onCheckedChange = { hapticsEnabled = it },
+                            onCheckedChange = { isEnabled ->
+                                HapticManager.updateHapticsEnabled(isEnabled, context)
+                                if (isEnabled) {
+                                    HapticManager.performClick(context)
+                                    Toast.makeText(context, "Haptic feedback enabled", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Haptic feedback disabled", Toast.LENGTH_SHORT).show()
+                                }
+                            },
                             showDivider = true
                         )
+
+                        if (HapticManager.isHapticsEnabled) {
+                            SettingsSegmentedRow(
+                                icon = Icons.Outlined.GraphicEq,
+                                iconTint = AppleHealth,
+                                title = "Vibration Strength",
+                                options = listOf("Light", "Medium", "Strong"),
+                                selectedIndex = when (HapticManager.hapticIntensity) {
+                                    HapticIntensity.LIGHT -> 0
+                                    HapticIntensity.MEDIUM -> 1
+                                    HapticIntensity.STRONG -> 2
+                                },
+                                accentColor = SystemBlue,
+                                onOptionSelected = { idx ->
+                                    val newIntensity = when (idx) {
+                                        0 -> HapticIntensity.LIGHT
+                                        1 -> HapticIntensity.MEDIUM
+                                        else -> HapticIntensity.STRONG
+                                    }
+                                    HapticManager.updateHapticIntensity(newIntensity)
+                                    HapticManager.performClick(context)
+                                },
+                                showDivider = true
+                            )
+                        }
+
                         SettingsValueRow(
                             icon = Icons.Outlined.Category,
                             iconTint = AppleStudy,
@@ -207,8 +246,34 @@ fun SettingsScreen(
                 }
             }
 
-            // 4. Customization & Theme
-            item {
+            // 4. Categories & Lists Management
+            item(key = "settings_categories_group") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionHeaderTitle(title = "CATEGORIES & LISTS")
+                    SettingsGroupCard {
+                        SettingsValueRow(
+                            icon = Icons.Outlined.Category,
+                            iconTint = SystemBlue,
+                            title = "Manage Categories",
+                            value = "${categoriesList.size} categories",
+                            onClick = { showManageCategoriesSheet = true },
+                            showDivider = true
+                        )
+                        SettingsActionRow(
+                            icon = Icons.Outlined.AddCircleOutline,
+                            iconTint = AppleHealth,
+                            title = "Create New Category",
+                            badgeText = "+ Add",
+                            enabled = true,
+                            onClick = { showCreateCategorySheet = true },
+                            showDivider = false
+                        )
+                    }
+                }
+            }
+
+            // 5. Customization & Theme
+            item(key = "settings_customization_group") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SectionHeaderTitle(title = "APPEARANCE & CUSTOMIZATION")
                     SettingsGroupCard {
@@ -253,8 +318,8 @@ fun SettingsScreen(
                 }
             }
 
-            // 5. Cloud Sync & Security / App Lock
-            item {
+            // 5. Security & App Lock
+            item(key = "settings_security_group") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SectionHeaderTitle(title = "SECURITY & APP LOCK")
                     SettingsGroupCard {
@@ -278,7 +343,7 @@ fun SettingsScreen(
                                     showAppLockSetupSheet = true
                                 }
                             },
-                            showDivider = true
+                            showDivider = AppLockManager.isLockEnabled
                         )
 
                         if (AppLockManager.isLockEnabled) {
@@ -357,30 +422,15 @@ fun SettingsScreen(
                                 title = "Require Lock",
                                 value = timeoutLabel,
                                 onClick = { showLockTimeoutSheet = true },
-                                showDivider = true
+                                showDivider = false
                             )
                         }
-
-                        SettingsSwitchRow(
-                            icon = Icons.Outlined.CloudSync,
-                            iconTint = SystemBlue,
-                            title = "iCloud Sync",
-                            subtitle = if (cloudSyncEnabled) "Synced 2 minutes ago" else "Offline mode",
-                            checked = cloudSyncEnabled,
-                            accentColor = SystemBlue,
-                            onCheckedChange = {
-                                cloudSyncEnabled = it
-                                val msg = if (it) "Cloud sync active" else "Cloud sync paused"
-                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                            },
-                            showDivider = false
-                        )
                     }
                 }
             }
 
-            // 6. Data & Task Management
-            item {
+            // 6. Data Management
+            item(key = "settings_data_group") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SectionHeaderTitle(title = "DATA MANAGEMENT")
                     SettingsGroupCard {
@@ -391,58 +441,14 @@ fun SettingsScreen(
                             badgeText = if (completedCount > 0) "$completedCount completed" else "None",
                             enabled = completedCount > 0,
                             onClick = { showClearCompletedDialog = true },
-                            showDivider = true
-                        )
-                        SettingsActionRow(
-                            icon = Icons.Outlined.FileDownload,
-                            iconTint = AppleHealth,
-                            title = "Export Backup Data",
-                            badgeText = "$totalTasks items",
-                            onClick = {
-                                Toast.makeText(context, "Exported $totalTasks tasks to taskflow_backup.json", Toast.LENGTH_SHORT).show()
-                            },
                             showDivider = false
                         )
                     }
                 }
             }
 
-            // 7. About & App Specification
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SectionHeaderTitle(title = "ABOUT TASKFLOW")
-                    SettingsGroupCard {
-                        SettingsActionRow(
-                            icon = Icons.Outlined.Info,
-                            iconTint = SystemBlue,
-                            title = "Apple HIG Design System",
-                            badgeText = "View Tokens",
-                            onClick = { showDesignTokensSheet = true },
-                            showDivider = true
-                        )
-                        SettingsActionRow(
-                            icon = Icons.Outlined.StarRate,
-                            iconTint = AppleStudy,
-                            title = "Rate TaskFlow & Feedback",
-                            badgeText = "5 Stars ⭐",
-                            onClick = { showFeedbackSheet = true },
-                            showDivider = true
-                        )
-                        SettingsValueRow(
-                            icon = Icons.Outlined.CheckCircle,
-                            iconTint = AppleHealth,
-                            title = "App Version",
-                            value = "v1.2.0 (Build 42)",
-                            onClick = { },
-                            showChevron = false,
-                            showDivider = false
-                        )
-                    }
-                }
-            }
-
-            // 8. Destructive Actions
-            item {
+            // 7. Destructive Actions
+            item(key = "settings_danger_group") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SectionHeaderTitle(title = "DANGER ZONE")
                     SettingsGroupCard {
@@ -539,37 +545,51 @@ fun SettingsScreen(
                     color = SystemLabelPrimary
                 )
 
-                listOf("Work", "Personal", "Health", "Study").forEach { cat ->
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (defaultCategory == cat) SystemBlueLight else SystemGroupedBackground,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                defaultCategory = cat
-                                showCategoryPickerSheet = false
-                            }
-                    ) {
-                        Row(
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(categoriesList, key = { it.id }) { cat ->
+                        val isSelected = defaultCategory.equals(cat.name, ignoreCase = true)
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) SystemBlueLight else SystemGroupedBackground,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .clickable {
+                                    defaultCategory = cat.name
+                                    showCategoryPickerSheet = false
+                                }
                         ) {
-                            Text(
-                                text = cat,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (defaultCategory == cat) SystemBlue else SystemLabelPrimary
-                            )
-                            if (defaultCategory == cat) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Check,
-                                    contentDescription = "Selected",
-                                    tint = SystemBlue,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(cat.getEmoji(), fontSize = 16.sp)
+                                    Text(
+                                        text = cat.name,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isSelected) SystemBlue else SystemLabelPrimary
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Check,
+                                        contentDescription = "Selected",
+                                        tint = SystemBlue,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -577,6 +597,62 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+
+    // Modal Sheet: Manage Categories
+    if (showManageCategoriesSheet) {
+        ManageCategoriesBottomSheet(
+            categoriesList = categoriesList,
+            taskList = taskList,
+            onDismiss = { showManageCategoriesSheet = false },
+            onCreateCategoryClick = {
+                showCreateCategorySheet = true
+            },
+            onDeleteCategory = { categoryToDelete ->
+                categoryPendingDelete = categoryToDelete
+            }
+        )
+    }
+
+    // Modal Sheet for Creating Custom Category
+    if (showCreateCategorySheet) {
+        CreateCategoryBottomSheet(
+            onDismiss = {
+                showCreateCategorySheet = false
+                pendingMigrationFromCategory = null
+            },
+            onCreateCategory = { newCategory ->
+                onCreateCategory(newCategory)
+                showCreateCategorySheet = false
+                // If this was triggered to create a migration destination:
+                pendingMigrationFromCategory?.let { fromCat ->
+                    onDeleteCategoryWithMigration(fromCat, newCategory.name)
+                    pendingMigrationFromCategory = null
+                }
+            }
+        )
+    }
+
+    // Modal Dialog for Category Deletion & Task Migration
+    categoryPendingDelete?.let { catToDelete ->
+        val affectedCount = taskList.count { it.category.equals(catToDelete.name, ignoreCase = true) }
+        val remainingCategories = categoriesList.filter { it.id != catToDelete.id }
+
+        DeleteCategoryMigrationDialog(
+            categoryToDelete = catToDelete,
+            affectedTasksCount = affectedCount,
+            availableCategories = remainingCategories,
+            onDismiss = { categoryPendingDelete = null },
+            onConfirmDeleteAndMigrate = { targetCategoryName ->
+                onDeleteCategoryWithMigration(catToDelete, targetCategoryName)
+                categoryPendingDelete = null
+            },
+            onRequestCreateNewCategory = {
+                pendingMigrationFromCategory = catToDelete
+                categoryPendingDelete = null
+                showCreateCategorySheet = true
+            }
+        )
     }
 
     // Modal Sheet 3: Select Default Due Time
@@ -757,112 +833,6 @@ fun SettingsScreen(
                             }
                         }
                     }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-        }
-    }
-
-    // Modal Sheet 6: Apple HIG Tokens Specs
-    if (showDesignTokensSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showDesignTokensSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = SystemGroupedBackground,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.85f)
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    text = "Apple HIG Design System",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SystemLabelPrimary
-                )
-                Text(
-                    text = "System Specification Tokens for TaskFlow Android",
-                    fontSize = 14.sp,
-                    color = SystemLabelSecondary
-                )
-
-                SettingsGroupCard {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("• Primary Accent: ${accentColor.displayName}", fontSize = 14.sp, color = SystemBlue, fontWeight = FontWeight.SemiBold)
-                        Text("• Grouped Canvas: Light #F2F2F7 / Dark #000000", fontSize = 14.sp, color = SystemLabelPrimary)
-                        Text("• Grouped Surface: Light #FFFFFF / Dark #1C1C1E", fontSize = 14.sp, color = SystemLabelPrimary)
-                        Text("• Corner Radius: 12.dp rounded corners", fontSize = 14.sp, color = SystemLabelPrimary)
-                        Text("• Thin Dividers: 0.5.dp thickness", fontSize = 14.sp, color = SystemLabelPrimary)
-                        Text("• Typography: SF / Inter (-0.5sp letter spacing)", fontSize = 14.sp, color = SystemLabelPrimary)
-                    }
-                }
-
-                Button(
-                    onClick = { showDesignTokensSheet = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text("Close", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-
-    // Modal Sheet 7: Rate & Feedback
-    if (showFeedbackSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showFeedbackSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = SystemSurface,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Enjoying TaskFlow?",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SystemLabelPrimary
-                )
-                Text(
-                    text = "Tap a star to rate your experience",
-                    fontSize = 14.sp,
-                    color = SystemLabelSecondary
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    repeat(5) { index ->
-                        Icon(
-                            imageVector = Icons.Filled.Star,
-                            contentDescription = "Star ${index + 1}",
-                            tint = AppleStudy,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clickable {
-                                    showFeedbackSheet = false
-                                    Toast.makeText(context, "Thank you for rating 5 stars! ⭐", Toast.LENGTH_SHORT).show()
-                                }
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = { showFeedbackSheet = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text("Submit Feedback", fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
@@ -1295,6 +1265,7 @@ fun SettingsSwitchRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable { onCheckedChange(!checked) }
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1319,7 +1290,7 @@ fun SettingsSwitchRow(
 
             Switch(
                 checked = checked,
-                onCheckedChange = onCheckedChange,
+                onCheckedChange = null,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
                     checkedTrackColor = activeAccent,
@@ -1349,11 +1320,15 @@ fun SettingsValueRow(
     showChevron: Boolean = true,
     showDivider: Boolean = true
 ) {
+    val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onClick() }
+                .clickable {
+                    HapticManager.performClick(context)
+                    onClick()
+                }
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1404,11 +1379,15 @@ fun SettingsActionRow(
     onClick: () -> Unit,
     showDivider: Boolean = true
 ) {
+    val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = enabled) { onClick() }
+                .clickable(enabled = enabled) {
+                    HapticManager.performClick(context)
+                    onClick()
+                }
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1467,6 +1446,7 @@ fun SettingsSegmentedRow(
     onOptionSelected: (Int) -> Unit,
     showDivider: Boolean = true
 ) {
+    val context = LocalContext.current
     val activeAccent = if (accentColor != Color.Unspecified) accentColor else SystemBlue
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -1504,7 +1484,10 @@ fun SettingsSegmentedRow(
                             color = if (isSelected) SystemSurface else Color.Transparent,
                             shadowElevation = if (isSelected) 1.dp else 0.dp,
                             modifier = Modifier
-                                .clickable { onOptionSelected(index) }
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    onOptionSelected(index)
+                                }
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
@@ -1535,6 +1518,7 @@ fun AccentColorSwatchRow(
     onAccentSelected: (AppAccentColor) -> Unit,
     showDivider: Boolean = true
 ) {
+    val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -1572,7 +1556,10 @@ fun AccentColorSwatchRow(
                                 color = if (isSelected) SystemLabelPrimary else SystemDivider,
                                 shape = CircleShape
                             )
-                            .clickable { onAccentSelected(accent) }
+                            .clickable {
+                                HapticManager.performClick(context)
+                                onAccentSelected(accent)
+                            }
                     ) {
                         if (isSelected) {
                             Icon(
@@ -1603,10 +1590,14 @@ fun SettingsDestructiveRow(
     title: String,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clickable {
+                HapticManager.performWarning(context)
+                onClick()
+            }
             .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1629,3 +1620,170 @@ fun SettingsDestructiveRow(
         )
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ManageCategoriesBottomSheet(
+    categoriesList: List<TaskListCategory>,
+    taskList: List<TaskItem>,
+    onDismiss: () -> Unit,
+    onCreateCategoryClick: () -> Unit,
+    onDeleteCategory: (TaskListCategory) -> Unit
+) {
+    val context = LocalContext.current
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = SystemGroupedBackground,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Manage Categories",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SystemLabelPrimary
+                    )
+                    Text(
+                        text = "${categoriesList.size} categories available",
+                        fontSize = 13.sp,
+                        color = SystemLabelSecondary
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        HapticManager.performClick(context)
+                        onCreateCategoryClick()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("New", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = SystemSurface,
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(categoriesList, key = { it.id }) { cat ->
+                        val count = taskList.count { it.category.equals(cat.name, ignoreCase = true) }
+                        val catColor = cat.getColor()
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(catColor)
+                                ) {
+                                    Icon(
+                                        imageVector = getCategoryIcon(cat.iconName, cat.name),
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                Column {
+                                    Text(
+                                        text = cat.name,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = SystemLabelPrimary
+                                    )
+                                    Text(
+                                        text = "$count task${if (count != 1) "s" else ""}",
+                                        fontSize = 12.sp,
+                                        color = SystemLabelSecondary
+                                    )
+                                }
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (cat.isSystemDefault) {
+                                    Surface(
+                                        shape = RoundedCornerShape(100.dp),
+                                        color = SystemGray5
+                                    ) {
+                                        Text(
+                                            text = "Default",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = SystemLabelSecondary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                } else {
+                                    IconButton(
+                                        onClick = {
+                                            HapticManager.performClick(context)
+                                            onDeleteCategory(cat)
+                                        },
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .background(SystemRed.copy(alpha = 0.1f))
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = "Delete ${cat.name}",
+                                            tint = SystemRed,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        HorizontalDivider(
+                            color = SystemDivider,
+                            thickness = 0.5.dp,
+                            modifier = Modifier.padding(start = 56.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
