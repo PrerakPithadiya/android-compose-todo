@@ -66,10 +66,31 @@ object UserProfileManager {
 
     private fun reloadState() {
         prefs?.let { p ->
-            val name = p.getString(KEY_NAME, "Prerak Pithadiya") ?: "Prerak Pithadiya"
-            val username = p.getString(KEY_USERNAME, "@prerak") ?: "@prerak"
-            val email = p.getString(KEY_EMAIL, "prerak@taskflow.app") ?: "prerak@taskflow.app"
-            val phone = p.getString(KEY_PHONE, "+1 (555) 382-9012") ?: "+1 (555) 382-9012"
+            val defaultName = if (com.example.todo_list.security.AuthManager.isAccountCreated && com.example.todo_list.security.AuthManager.registeredName.isNotEmpty()) {
+                com.example.todo_list.security.AuthManager.registeredName
+            } else {
+                "Prerak Pithadiya"
+            }
+            val defaultUsername = if (com.example.todo_list.security.AuthManager.isAccountCreated && com.example.todo_list.security.AuthManager.registeredUsername.isNotEmpty()) {
+                com.example.todo_list.security.AuthManager.registeredUsername
+            } else {
+                "@prerak"
+            }
+            val defaultEmail = if (com.example.todo_list.security.AuthManager.isAccountCreated && com.example.todo_list.security.AuthManager.registeredEmail.isNotEmpty()) {
+                com.example.todo_list.security.AuthManager.registeredEmail
+            } else {
+                "prerak@taskflow.app"
+            }
+            val defaultPhone = if (com.example.todo_list.security.AuthManager.isAccountCreated && com.example.todo_list.security.AuthManager.registeredPhone.isNotEmpty()) {
+                com.example.todo_list.security.AuthManager.registeredPhone
+            } else {
+                "+1 (555) 382-9012"
+            }
+
+            val name = p.getString(KEY_NAME, defaultName) ?: defaultName
+            val username = p.getString(KEY_USERNAME, defaultUsername) ?: defaultUsername
+            val email = p.getString(KEY_EMAIL, defaultEmail) ?: defaultEmail
+            val phone = p.getString(KEY_PHONE, defaultPhone) ?: defaultPhone
             val bio = p.getString(
                 KEY_BIO,
                 "Productivity Architect & Android Developer • Building minimal, powerful tools ⚡"

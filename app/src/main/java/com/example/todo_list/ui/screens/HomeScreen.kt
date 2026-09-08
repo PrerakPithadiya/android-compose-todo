@@ -62,6 +62,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import com.example.todo_list.manager.UserProfileManager
 import com.example.todo_list.notification.TaskNotificationScheduler
+import com.example.todo_list.data.repository.TaskRepository
 import com.example.todo_list.ui.components.CreateCategoryBottomSheet
 import com.example.todo_list.ui.screens.profile.ProfileScreen
 import com.example.todo_list.utils.HapticManager
@@ -102,6 +103,11 @@ fun HomeScreen(
         }
     }
 
+    val coroutineScope = rememberCoroutineScope()
+    val taskRepository = remember { TaskRepository.getInstance(context) }
+    val taskList by taskRepository.tasks.collectAsState(initial = emptyList())
+    val categoriesList by taskRepository.categories.collectAsState(initial = TaskListCategory.DEFAULT_CATEGORIES)
+
     var selectedTab by remember { mutableStateOf(0) }
     var showProfileScreen by remember { mutableStateOf(false) }
     val userProfile = UserProfileManager.profile
@@ -110,64 +116,49 @@ fun HomeScreen(
     var showViewAllSheet by remember { mutableStateOf(false) }
     var editingTask by remember { mutableStateOf<TaskItem?>(null) }
     var searchQuery by remember { mutableStateOf("") }
-    var categoriesList by remember { mutableStateOf(TaskListCategory.DEFAULT_CATEGORIES) }
     var prefilledTaskCategory by remember { mutableStateOf<String?>(null) }
 
-    val todayEpoch = System.currentTimeMillis() / (1000 * 60 * 60 * 24)
-
-    var taskList by remember {
-        mutableStateOf(
-            listOf(
-                TaskItem("1", "Review design specs", "Work", "Today", "09:30 AM", false, todayEpoch),
-                TaskItem("3", "Grocery shopping", "Personal", "Today", "11:00 AM", true, todayEpoch),
-                TaskItem("2", "Team sync at 2 PM", "Work", "Today", "02:00 PM", false, todayEpoch),
-                TaskItem("7", "Health checkup", "Health", "Today", "03:30 PM", false, todayEpoch),
-                TaskItem("4", "Update project timeline", "Work", "Today", "04:30 PM", false, todayEpoch),
-                TaskItem("5", "Prepare quarterly report", "Work", "Today", "06:00 PM", false, todayEpoch),
-                TaskItem("8", "Study Compose layout", "Study", "Today", "06:45 PM", false, todayEpoch),
-                TaskItem("6", "Evening gym session", "Health", "Today", "07:30 PM", false, todayEpoch)
-            )
-        )
-    }
-
-    val onToggleCompleteHelper: (TaskItem) -> Unit = remember(context) {
+    val onToggleCompleteHelper: (TaskItem) -> Unit = remember(context, taskRepository, coroutineScope) {
         { toggledTask: TaskItem ->
-            taskList = taskList.map {
-                if (it.id == toggledTask.id) {
-                    val updated = it.copy(isCompleted = !it.isCompleted)
-                    if (updated.isCompleted) {
-                        TaskNotificationScheduler.cancel(context, updated)
-                        UserProfileManager.addXp(50)
-                    } else {
-                        TaskNotificationScheduler.schedule(context, updated)
-                    }
-                    updated
-                } else it
+            coroutineScope.launch {
+                val updated = taskRepository.toggleTaskComplete(toggledTask)
+                if (updated.isCompleted) {
+                    TaskNotificationScheduler.cancel(context, updated)
+                    UserProfileManager.addXp(50)
+                } else {
+                    TaskNotificationScheduler.schedule(context, updated)
+                }
             }
         }
     }
 
-    val onDeleteHelper: (TaskItem) -> Unit = remember(context) {
+    val onDeleteHelper: (TaskItem) -> Unit = remember(context, taskRepository, coroutineScope) {
         { deletedTask: TaskItem ->
             TaskNotificationScheduler.cancel(context, deletedTask)
-            taskList = taskList.filter { it.id != deletedTask.id }
+            coroutineScope.launch {
+                taskRepository.deleteTask(deletedTask)
+            }
         }
     }
 
-    val onTaskCreatedHelper: (TaskItem) -> Unit = remember(context) {
+    val onTaskCreatedHelper: (TaskItem) -> Unit = remember(context, taskRepository, coroutineScope) {
         { newTask: TaskItem ->
-            taskList = taskList + newTask
             TaskNotificationScheduler.schedule(context, newTask)
+            coroutineScope.launch {
+                taskRepository.insertTask(newTask)
+            }
         }
     }
 
-    val onTaskUpdatedHelper: (TaskItem) -> Unit = remember(context) {
+    val onTaskUpdatedHelper: (TaskItem) -> Unit = remember(context, taskRepository, coroutineScope) {
         { updatedTask: TaskItem ->
-            taskList = taskList.map { if (it.id == updatedTask.id) updatedTask else it }
             if (updatedTask.isCompleted) {
                 TaskNotificationScheduler.cancel(context, updatedTask)
             } else {
                 TaskNotificationScheduler.schedule(context, updatedTask)
+            }
+            coroutineScope.launch {
+                taskRepository.updateTask(updatedTask)
             }
         }
     }
@@ -189,7 +180,6 @@ fun HomeScreen(
     }
 
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
 
     val totalTasks = remember(sortedTaskList) { sortedTaskList.size }
     val completedTasks = remember(sortedTaskList) { sortedTaskList.count { it.isCompleted } }
@@ -333,20 +323,13 @@ fun HomeScreen(
                 onDeleteTask = onDeleteHelper,
                 onTaskCreated = onTaskCreatedHelper,
                 onCreateCategory = { newCategory ->
-                    categoriesList = categoriesList + newCategory
+                    coroutineScope.launch { taskRepository.insertCategory(newCategory) }
                 },
                 onDeleteCategory = { categoryToDelete ->
-                    categoriesList = categoriesList.filter { it.id != categoryToDelete.id }
+                    coroutineScope.launch { taskRepository.deleteCategory(categoryToDelete) }
                 },
                 onDeleteCategoryWithMigration = { categoryToDelete, targetCategoryName ->
-                    taskList = taskList.map { task ->
-                        if (task.category.equals(categoryToDelete.name, ignoreCase = true)) {
-                            task.copy(category = targetCategoryName)
-                        } else {
-                            task
-                        }
-                    }
-                    categoriesList = categoriesList.filter { it.id != categoryToDelete.id }
+                    coroutineScope.launch { taskRepository.deleteCategoryWithMigration(categoryToDelete, targetCategoryName) }
                 },
                 onOpenAddTaskSheet = { prefilledCategory ->
                     prefilledTaskCategory = prefilledCategory
@@ -357,27 +340,20 @@ fun HomeScreen(
                 taskList = taskList,
                 categoriesList = categoriesList,
                 onCreateCategory = { newCategory ->
-                    categoriesList = categoriesList + newCategory
+                    coroutineScope.launch { taskRepository.insertCategory(newCategory) }
                 },
                 onDeleteCategoryWithMigration = { categoryToDelete, targetCategoryName ->
-                    taskList = taskList.map { task ->
-                        if (task.category.equals(categoryToDelete.name, ignoreCase = true)) {
-                            task.copy(category = targetCategoryName)
-                        } else {
-                            task
-                        }
-                    }
-                    categoriesList = categoriesList.filter { it.id != categoryToDelete.id }
+                    coroutineScope.launch { taskRepository.deleteCategoryWithMigration(categoryToDelete, targetCategoryName) }
                 },
                 themeMode = themeMode,
                 onThemeModeChange = onThemeModeChange,
                 accentColor = accentColor,
                 onAccentColorChange = onAccentColorChange,
                 onClearCompletedTasks = {
-                    taskList = taskList.filter { !it.isCompleted }
+                    coroutineScope.launch { taskRepository.clearCompletedTasks() }
                 },
                 onResetAllData = {
-                    taskList = emptyList()
+                    coroutineScope.launch { taskRepository.clearAllTasks() }
                 },
                 onOpenProfile = {
                     showProfileScreen = true
@@ -394,7 +370,7 @@ fun HomeScreen(
             initialCategory = prefilledTaskCategory ?: "Work",
             categoriesList = categoriesList,
             onCreateCategory = { newCategory ->
-                categoriesList = categoriesList + newCategory
+                coroutineScope.launch { taskRepository.insertCategory(newCategory) }
             },
             onDismiss = {
                 showAddTaskSheet = false
@@ -417,7 +393,7 @@ fun HomeScreen(
             task = taskToEdit,
             categoriesList = categoriesList,
             onCreateCategory = { newCategory ->
-                categoriesList = categoriesList + newCategory
+                coroutineScope.launch { taskRepository.insertCategory(newCategory) }
             },
             onDismiss = { editingTask = null },
             onTaskUpdated = { updatedTask ->

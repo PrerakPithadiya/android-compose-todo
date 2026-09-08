@@ -28,6 +28,9 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         TaskNotificationScheduler.createNotificationChannel(this)
 
+        // Initialize persistent Auth & Session state
+        com.example.todo_list.security.AuthManager.initialize(this)
+
         // Initialize persistent App Lock state
         AppLockManager.initialize(this)
 
@@ -65,19 +68,32 @@ class MainActivity : FragmentActivity() {
                 2 -> true
                 else -> isSystemInDarkTheme()
             }
+
+            val isLoggedIn = com.example.todo_list.security.AuthManager.isLoggedIn
+            val isAccountCreated = com.example.todo_list.security.AuthManager.isAccountCreated
+
             TaskFlowTheme(darkTheme = isDark, accentColor = selectedAccent) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Main application content
-                    HomeScreen(
-                        themeMode = themeMode,
-                        onThemeModeChange = { themeMode = it },
-                        accentColor = selectedAccent,
-                        onAccentColorChange = { selectedAccent = it }
-                    )
+                    if (!isAccountCreated || !isLoggedIn) {
+                        // Registration & Login Gatekeeper
+                        com.example.todo_list.ui.screens.auth.AuthScreen(
+                            onAuthComplete = {
+                                // User logged in or registered successfully
+                            }
+                        )
+                    } else {
+                        // Main application content
+                        HomeScreen(
+                            themeMode = themeMode,
+                            onThemeModeChange = { themeMode = it },
+                            accentColor = selectedAccent,
+                            onAccentColorChange = { selectedAccent = it }
+                        )
 
-                    // Gatekeeper App Lock Overlay (Requires passcode or fingerprint to continue)
-                    if (AppLockManager.isLocked) {
-                        AppLockAuthScreen()
+                        // Gatekeeper App Lock Overlay (Requires passcode or fingerprint to continue)
+                        if (AppLockManager.isLocked) {
+                            AppLockAuthScreen()
+                        }
                     }
                 }
             }

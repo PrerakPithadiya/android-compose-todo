@@ -254,13 +254,19 @@ fun ProfileScreen(
                         ProfileSettingRow(
                             icon = Icons.Outlined.SwitchAccount,
                             iconTint = SystemBlue,
-                            title = "Switch Profile",
-                            value = profile.email,
+                            title = "Active Account",
+                            value = com.example.todo_list.security.AuthManager.registeredUsername.ifEmpty { profile.username },
                             onClick = {
-                                Toast.makeText(context, "Currently active profile: ${profile.username}", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Signed in as: ${profile.name} (${profile.username})", Toast.LENGTH_SHORT).show()
                             },
                             showDivider = true
                         )
+                        ProfileDestructiveRow(
+                            icon = Icons.Outlined.Logout,
+                            title = "Log Out of Account",
+                            onClick = { showSignOutDialog = true }
+                        )
+                        HorizontalDivider(color = SystemDivider, thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp))
                         ProfileDestructiveRow(
                             icon = Icons.Outlined.RestartAlt,
                             title = "Reset Profile to Defaults",
@@ -400,6 +406,38 @@ fun ProfileScreen(
                     }
                 ) {
                     Text("Got It", color = SystemBlue, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = SystemSurface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    // Dialog: Sign Out of Account
+    if (showSignOutDialog) {
+        AlertDialog(
+            onDismissRequest = { showSignOutDialog = false },
+            title = {
+                Text("Log Out of Account?", fontWeight = FontWeight.Bold, color = SystemRed, fontSize = 18.sp)
+            },
+            text = {
+                Text("You will be signed out of TaskFlow and returned to the login screen.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSignOutDialog = false
+                        com.example.todo_list.security.AuthManager.logout()
+                        HapticManager.performWarning(context)
+                        Toast.makeText(context, "Logged out successfully", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Log Out", color = SystemRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutDialog = false }) {
+                    Text("Cancel", color = SystemBlue)
                 }
             },
             containerColor = SystemSurface,

@@ -105,6 +105,7 @@ fun SettingsScreen(
     var showAppIconSheet by remember { mutableStateOf(false) }
     var showClearCompletedDialog by remember { mutableStateOf(false) }
     var showResetDataDialog by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
 
     val totalTasks = remember(taskList) { taskList.size }
@@ -449,7 +450,29 @@ fun SettingsScreen(
                 }
             }
 
-            // 7. Destructive Actions
+            // 7. Account & Session Management
+            item(key = "settings_account_session_group") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionHeaderTitle(title = "ACCOUNT & SESSION")
+                    SettingsGroupCard {
+                        SettingsValueRow(
+                            icon = Icons.Outlined.PersonOutline,
+                            iconTint = SystemBlue,
+                            title = "Signed In As",
+                            value = com.example.todo_list.security.AuthManager.registeredUsername.ifEmpty { userProfile.username },
+                            onClick = { onOpenProfile() },
+                            showDivider = true
+                        )
+                        SettingsDestructiveRow(
+                            icon = Icons.Outlined.Logout,
+                            title = "Log Out of TaskFlow",
+                            onClick = { showLogoutDialog = true }
+                        )
+                    }
+                }
+            }
+
+            // 8. Destructive Actions
             item(key = "settings_danger_group") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SectionHeaderTitle(title = "DANGER ZONE")
@@ -852,6 +875,43 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetDataDialog = false }) {
+                    Text("Cancel", color = SystemBlue)
+                }
+            },
+            containerColor = SystemSurface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    // Confirmation Dialog: Log Out
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = {
+                Text(
+                    text = "Log Out of TaskFlow?",
+                    fontWeight = FontWeight.Bold,
+                    color = SystemRed,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Text("You will need to enter your username and password to log in again.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutDialog = false
+                        com.example.todo_list.security.AuthManager.logout()
+                        HapticManager.performWarning(context)
+                        Toast.makeText(context, "Logged out successfully", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("Log Out", color = SystemRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
                     Text("Cancel", color = SystemBlue)
                 }
             },
