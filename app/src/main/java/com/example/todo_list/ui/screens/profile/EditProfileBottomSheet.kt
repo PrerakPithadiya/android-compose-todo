@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
@@ -54,6 +55,7 @@ fun EditProfileBottomSheet(
     var selectedPresetId by remember { mutableIntStateOf(profile.avatarPresetId) }
     var customUri by remember { mutableStateOf<String?>(profile.customAvatarUri) }
     var showImageCropDialog by remember { mutableStateOf(false) }
+    var showChangePasswordSheet by remember { mutableStateOf(false) }
     var pendingRawUri by remember { mutableStateOf<String?>(null) }
 
     // Image Picker Launcher - Stages photo for editing instead of direct commit
@@ -79,6 +81,7 @@ fun EditProfileBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -365,6 +368,56 @@ fun EditProfileBottomSheet(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // Security & Password Change Action Row
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = SystemGray6,
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            HapticManager.performClick(context)
+                            showChangePasswordSheet = true
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.LockReset,
+                                contentDescription = "Password",
+                                tint = SystemBlue,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Change Account Password",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SystemLabelPrimary
+                                )
+                                Text(
+                                    text = "Protected with Multi-Factor Security Gate",
+                                    fontSize = 12.sp,
+                                    color = SystemLabelSecondary
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                            contentDescription = null,
+                            tint = SystemLabelSecondary.copy(alpha = 0.6f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
             }
 
             // Save Changes Button
@@ -407,6 +460,17 @@ fun EditProfileBottomSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    // Modal Sheet: Multi-Stage Secure Change Password Sheet
+    if (showChangePasswordSheet) {
+        ChangePasswordSecuritySheet(
+            onDismiss = { showChangePasswordSheet = false },
+            onPasswordChanged = {
+                showChangePasswordSheet = false
+                Toast.makeText(context, "Account password updated securely! 🛡️", Toast.LENGTH_SHORT).show()
+            }
+        )
     }
 
     // Apple iOS Move & Scale Photo Crop / Filter Dialog

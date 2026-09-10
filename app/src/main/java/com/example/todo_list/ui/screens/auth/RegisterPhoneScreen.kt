@@ -51,9 +51,6 @@ fun RegisterPhoneScreen(
     var selectedCountryCode by remember { mutableStateOf("+91") }
     var phoneNumber by remember { mutableStateOf("") }
     var showCountryPicker by remember { mutableStateOf(false) }
-    var isSending by remember { mutableStateOf(false) }
-    var smsErrorDialogMessage by remember { mutableStateOf<String?>(null) }
-    var pendingOtpToContinueWith by remember { mutableStateOf<String?>(null) }
 
     val isPhoneValid = remember(phoneNumber) {
         val digits = phoneNumber.filter { it.isDigit() }
@@ -70,6 +67,7 @@ fun RegisterPhoneScreen(
             .background(SystemGroupedBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -233,25 +231,11 @@ fun RegisterPhoneScreen(
                         return@Button
                     }
                     focusManager.clearFocus()
-                    coroutineScope.launch {
-                        isSending = true
-                        val (generatedOtp, deliveryResult) = AuthManager.sendRealSmsOtp(fullPhoneNumber)
-                        isSending = false
-                        when (deliveryResult) {
-                            is com.example.todo_list.security.SmsDeliveryResult.Success -> {
-                                HapticManager.performSuccess(context)
-                                Toast.makeText(context, "Real SMS sent to $fullPhoneNumber", Toast.LENGTH_LONG).show()
-                                onCodeSent(fullPhoneNumber, generatedOtp)
-                            }
-                            is com.example.todo_list.security.SmsDeliveryResult.Failure -> {
-                                HapticManager.performError(context)
-                                pendingOtpToContinueWith = generatedOtp
-                                smsErrorDialogMessage = deliveryResult.errorMessage
-                            }
-                        }
-                    }
+                    HapticManager.performSuccess(context)
+                    val generatedOtp = AuthManager.sendOtp(fullPhoneNumber)
+                    onCodeSent(fullPhoneNumber, generatedOtp)
                 },
-                enabled = isPhoneValid && !isSending,
+                enabled = isPhoneValid,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = SystemBlue,
@@ -261,31 +245,12 @@ fun RegisterPhoneScreen(
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                if (isSending) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            strokeWidth = 2.5.dp,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = "Sending Real SMS...",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                } else {
-                    Text(
-                        text = "Send Verification Code",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
+                Text(
+                    text = "Send Verification Code",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
             }
         }
 
@@ -387,66 +352,5 @@ fun RegisterPhoneScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
-    }
-
-    // Fast2SMS Gateway Status / Notice Dialog
-    smsErrorDialogMessage?.let { errMsg ->
-        val isRechargeNotice = errMsg.contains("100 INR", ignoreCase = true) || errMsg.contains("transaction", ignoreCase = true)
-        AlertDialog(
-            onDismissRequest = { smsErrorDialogMessage = null },
-            title = {
-                Text(
-                    text = if (isRechargeNotice) "Fast2SMS Wallet Setup Required" else "Fast2SMS Gateway Notice",
-                    fontWeight = FontWeight.Bold,
-                    color = SystemRed,
-                    fontSize = 18.sp
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = errMsg,
-                        fontSize = 14.sp,
-                        color = SystemLabelPrimary
-                    )
-                    if (isRechargeNotice) {
-                        Text(
-                            text = "Note: Fast2SMS API requires an initial transaction/recharge of ₹100 INR on fast2sms.com before real carrier SMS dispatch is unlocked on their Dev API route.",
-                            fontSize = 13.sp,
-                            color = SystemLabelSecondary
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                if (pendingOtpToContinueWith != null) {
-                    TextButton(
-                        onClick = {
-                            val code = pendingOtpToContinueWith!!
-                            smsErrorDialogMessage = null
-                            pendingOtpToContinueWith = null
-                            onCodeSent(fullPhoneNumber, code)
-                        }
-                    ) {
-                        Text(
-                            text = "Proceed to Verify",
-                            color = SystemBlue,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                } else {
-                    TextButton(onClick = { smsErrorDialogMessage = null }) {
-                        Text("OK", color = SystemBlue)
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { smsErrorDialogMessage = null }) {
-                    Text("Dismiss", color = SystemGray)
-                }
-            },
-            containerColor = SystemSurface,
-            shape = RoundedCornerShape(16.dp)
-        )
     }
 }

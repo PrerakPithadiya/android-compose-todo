@@ -1,13 +1,20 @@
 package com.example.todo_list.data.local.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.todo_list.model.TaskItem
 
 /**
  * Room Entity representing a task item stored in SQLite.
+ * Associated with a specific userId for multi-user isolation.
  */
-@Entity(tableName = "tasks")
+@Entity(
+    tableName = "tasks",
+    indices = [
+        Index(value = ["userId"])
+    ]
+)
 data class TaskEntity(
     @PrimaryKey
     val id: String,
@@ -17,6 +24,7 @@ data class TaskEntity(
     val time: String,
     val isCompleted: Boolean = false,
     val epochDay: Long = 0L,
+    val userId: String = "",
     val createdAt: Long = System.currentTimeMillis()
 ) {
     fun toModel(): TaskItem {
@@ -27,7 +35,8 @@ data class TaskEntity(
             date = date,
             time = time,
             isCompleted = isCompleted,
-            epochDay = epochDay
+            epochDay = epochDay,
+            userId = userId
         )
     }
 
@@ -41,6 +50,7 @@ data class TaskEntity(
                 time = model.time,
                 isCompleted = model.isCompleted,
                 epochDay = model.epochDay,
+                userId = model.userId,
                 createdAt = createdAt
             )
         }

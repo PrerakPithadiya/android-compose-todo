@@ -140,21 +140,11 @@ object TaskNotificationScheduler {
         }
 
         try {
-            val parts = task.time.trim().split(" ")
-            val timeParts = parts[0].split(":")
-            var hour = timeParts[0].toInt()
-            val minute = timeParts[1].toInt()
-            val amPm = parts.getOrNull(1)?.uppercase() ?: "AM"
-
+            val (hour, minute) = com.example.todo_list.utils.TimeFormatHelper.parseHourMinute(task.time)
+            calendar.set(Calendar.HOUR_OF_DAY, hour)
             calendar.set(Calendar.MINUTE, minute)
             calendar.set(Calendar.SECOND, 0)
             calendar.set(Calendar.MILLISECOND, 0)
-
-            if (amPm == "PM") {
-                calendar.set(Calendar.HOUR_OF_DAY, if (hour == 12) 12 else hour + 12)
-            } else {
-                calendar.set(Calendar.HOUR_OF_DAY, if (hour == 12) 0 else hour)
-            }
         } catch (e: Exception) {
             calendar.set(Calendar.HOUR_OF_DAY, 12)
             calendar.set(Calendar.MINUTE, 0)

@@ -47,8 +47,8 @@ fun IosNotificationBanner(
     LaunchedEffect(visible, otpCode) {
         if (visible && otpCode.isNotEmpty()) {
             HapticManager.performSuccess(context)
-            // Auto dismiss after 8 seconds
-            delay(8000)
+            // Stays visible for 60 seconds matching OTP expiration countdown
+            delay(60000)
             onDismiss()
         }
     }
@@ -111,7 +111,7 @@ fun IosNotificationBanner(
                         }
 
                         Text(
-                            text = "MESSAGES • FAST2SMS",
+                            text = "TASKFLOW SECURITY",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = SystemLabelSecondary,
@@ -137,13 +137,13 @@ fun IosNotificationBanner(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            text = "Carrier SMS Dispatched: $otpCode",
+                            text = "Verification Code: $otpCode",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = SystemLabelPrimary
                         )
                         Text(
-                            text = "Delivered via SMS to your phone. Tap to autofill.",
+                            text = "Valid for 60 seconds. Tap Autofill to enter.",
                             fontSize = 13.sp,
                             color = SystemLabelSecondary
                         )

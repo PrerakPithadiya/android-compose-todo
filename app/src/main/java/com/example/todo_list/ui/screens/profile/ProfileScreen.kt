@@ -83,6 +83,8 @@ fun ProfileScreen(
     // Interactive Sheets state
     var showEditProfileSheet by remember { mutableStateOf(false) }
     var showPhotoViewerDialog by remember { mutableStateOf(false) }
+    var showChangeUsernameDialog by remember { mutableStateOf(false) }
+    var showChangePasswordSheet by remember { mutableStateOf(false) }
     var showDigitalCardSheet by remember { mutableStateOf(false) }
     var selectedBadgeForDetail by remember { mutableStateOf<AchievementBadge?>(null) }
     var showFocusStatusPicker by remember { mutableStateOf(false) }
@@ -174,36 +176,7 @@ fun ProfileScreen(
                 }
             }
 
-            // 7. TaskFlow Pro & iCloud Sync Hub Card
-            item(key = "profile_pro_cloud_hub") {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ProfileSectionHeader(title = "MEMBERSHIP & CLOUD SYNC")
-                    TaskFlowProCard(
-                        lastSyncTimestamp = UserProfileManager.lastSyncTimestamp,
-                        isSyncing = isSyncing,
-                        syncRotation = syncRotation.value,
-                        onSyncNowClick = {
-                            if (!isSyncing) {
-                                isSyncing = true
-                                HapticManager.performClick(context)
-                                coroutineScope.launch {
-                                    syncRotation.animateTo(
-                                        targetValue = syncRotation.value + 360f,
-                                        animationSpec = tween(durationMillis = 900, easing = LinearEasing)
-                                    )
-                                    UserProfileManager.triggerCloudSync {
-                                        isSyncing = false
-                                        HapticManager.performSuccess(context)
-                                        Toast.makeText(context, "iCloud Vault synced successfully", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        }
-                    )
-                }
-            }
-
-            // 8. Personal Preferences & Goals Inset Group
+            // 7. Personal Preferences & Goals Inset Group
             item(key = "profile_preferences_group") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ProfileSectionHeader(title = "PERSONAL PREFERENCES")
@@ -249,16 +222,32 @@ fun ProfileScreen(
             // 9. Account Actions & Reset Options
             item(key = "profile_account_danger_group") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ProfileSectionHeader(title = "ACCOUNT & DATA")
+                    ProfileSectionHeader(title = "ACCOUNT & SECURITY")
                     ProfileGroupCard {
                         ProfileSettingRow(
                             icon = Icons.Outlined.SwitchAccount,
                             iconTint = SystemBlue,
                             title = "Active Account",
-                            value = com.example.todo_list.security.AuthManager.registeredUsername.ifEmpty { profile.username },
+                            value = com.example.todo_list.security.AuthManager.registeredName.ifEmpty { profile.name },
                             onClick = {
                                 Toast.makeText(context, "Signed in as: ${profile.name} (${profile.username})", Toast.LENGTH_SHORT).show()
                             },
+                            showDivider = true
+                        )
+                        ProfileSettingRow(
+                            icon = Icons.Outlined.AlternateEmail,
+                            iconTint = SystemBlue,
+                            title = "Username Handle",
+                            value = profile.username,
+                            onClick = { showChangeUsernameDialog = true },
+                            showDivider = true
+                        )
+                        ProfileSettingRow(
+                            icon = Icons.Outlined.LockReset,
+                            iconTint = SystemBlue,
+                            title = "Change Password",
+                            value = "Strict 2FA Gate",
+                            onClick = { showChangePasswordSheet = true },
                             showDivider = true
                         )
                         ProfileDestructiveRow(
@@ -276,6 +265,28 @@ fun ProfileScreen(
                 }
             }
         }
+    }
+
+    // Modal Sheet: Change Username Dialog
+    if (showChangeUsernameDialog) {
+        ChangeUsernameDialog(
+            currentUsername = profile.username,
+            onDismiss = { showChangeUsernameDialog = false },
+            onUsernameChanged = {
+                // Profile reactively updates
+            }
+        )
+    }
+
+    // Modal Sheet: Multi-Stage Secure Change Password Sheet
+    if (showChangePasswordSheet) {
+        ChangePasswordSecuritySheet(
+            onDismiss = { showChangePasswordSheet = false },
+            onPasswordChanged = {
+                showChangePasswordSheet = false
+                Toast.makeText(context, "Account password updated securely! 🛡️", Toast.LENGTH_SHORT).show()
+            }
+        )
     }
 
     // Full-Screen Profile Photo Viewer Lightbox
@@ -935,8 +946,21 @@ fun AchievementsSection(
     onBadgeClick: (AchievementBadge) -> Unit
 ) {
     val unlockedCount = achievements.count { it.isUnlocked }
+    val inProgressCount = achievements.size - unlockedCount
+
+    // Filter Tab State: 0 = All, 1 = Achieved, 2 = In Progress
+    var selectedFilterTab by remember { mutableIntStateOf(0) }
+
+    val filteredAchievements = remember(achievements, selectedFilterTab) {
+        when (selectedFilterTab) {
+            1 -> achievements.filter { it.isUnlocked }
+            2 -> achievements.filter { !it.isUnlocked }
+            else -> achievements
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Header Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -945,16 +969,38 @@ fun AchievementsSection(
             ProfileSectionHeader(title = "ACHIEVEMENT MEDALS")
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = SystemBlueLight
+                color = SystemGreen.copy(alpha = 0.12f)
             ) {
                 Text(
-                    text = "$unlockedCount / ${achievements.size} Unlocked",
+                    text = "🏆 $unlockedCount / ${achievements.size} Achieved",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = SystemBlue,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    color = SystemGreen,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                 )
             }
+        }
+
+        // Segmented Filter Tabs (All | Achieved | In Progress)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AchievementFilterPill(
+                label = "All (${achievements.size})",
+                isSelected = selectedFilterTab == 0,
+                onClick = { selectedFilterTab = 0 }
+            )
+            AchievementFilterPill(
+                label = "Achieved ($unlockedCount) 🏆",
+                isSelected = selectedFilterTab == 1,
+                onClick = { selectedFilterTab = 1 }
+            )
+            AchievementFilterPill(
+                label = "In Progress ($inProgressCount) 🔒",
+                isSelected = selectedFilterTab == 2,
+                onClick = { selectedFilterTab = 2 }
+            )
         }
 
         // Horizontal Carousel of Medals
@@ -962,7 +1008,7 @@ fun AchievementsSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(horizontal = 2.dp)
         ) {
-            items(achievements, key = { it.id }) { badge ->
+            items(filteredAchievements, key = { it.id }) { badge ->
                 val context = LocalContext.current
                 val tierColor = Color(badge.tier.colorHex)
                 val isUnlocked = badge.isUnlocked
@@ -971,11 +1017,11 @@ fun AchievementsSection(
                     shape = RoundedCornerShape(16.dp),
                     color = SystemSurface,
                     border = androidx.compose.foundation.BorderStroke(
-                        width = if (isUnlocked) 1.dp else 0.5.dp,
-                        color = if (isUnlocked) tierColor.copy(alpha = 0.5f) else SystemDivider
+                        width = if (isUnlocked) 1.2.dp else 0.5.dp,
+                        color = if (isUnlocked) tierColor.copy(alpha = 0.65f) else SystemDivider
                     ),
                     modifier = Modifier
-                        .width(135.dp)
+                        .width(148.dp)
                         .clickable {
                             HapticManager.performClick(context)
                             onBadgeClick(badge)
@@ -986,22 +1032,83 @@ fun AchievementsSection(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // Medal Icon Circle
+                        // Top Status Tag
+                        if (isUnlocked) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = SystemGreen.copy(alpha = 0.15f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = null,
+                                        tint = SystemGreen,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Text(
+                                        text = "ACHIEVED",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SystemGreen
+                                    )
+                                }
+                            }
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = SystemOrange.copy(alpha = 0.12f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Lock,
+                                        contentDescription = null,
+                                        tint = SystemOrange,
+                                        modifier = Modifier.size(9.dp)
+                                    )
+                                    Text(
+                                        text = "IN PROGRESS",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = SystemOrange
+                                    )
+                                }
+                            }
+                        }
+
+                        // Medal Icon Circle with 3D Tier glow
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(52.dp)
+                                .size(54.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (isUnlocked) tierColor.copy(alpha = 0.15f) else SystemGray5
+                                    if (isUnlocked) {
+                                        tierColor.copy(alpha = 0.18f)
+                                    } else {
+                                        SystemGray5
+                                    }
+                                )
+                                .border(
+                                    width = if (isUnlocked) 1.5.dp else 0.5.dp,
+                                    color = if (isUnlocked) tierColor.copy(alpha = 0.4f) else Color.Transparent,
+                                    shape = CircleShape
                                 )
                         ) {
                             Text(
                                 text = if (isUnlocked) badge.emoji else "🔒",
-                                fontSize = if (isUnlocked) 26.sp else 18.sp
+                                fontSize = if (isUnlocked) 28.sp else 20.sp
                             )
                         }
 
+                        // Title
                         Text(
                             text = badge.title,
                             fontSize = 13.sp,
@@ -1012,22 +1119,79 @@ fun AchievementsSection(
                             overflow = TextOverflow.Ellipsis
                         )
 
+                        // Tier Tag & Bounty
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = if (isUnlocked) Color(badge.tier.containerColorHex) else SystemGray5
                         ) {
                             Text(
-                                text = badge.tier.title,
+                                text = "${badge.tier.title} • +${badge.xpReward} XP",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (isUnlocked) tierColor else SystemGray,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
+
+                        // Progress Indicator for In-Progress Medals
+                        if (!isUnlocked) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                val progressRatio = (badge.currentProgress.toFloat() / badge.maxProgress.toFloat()).coerceIn(0f, 1f)
+                                LinearProgressIndicator(
+                                    progress = { progressRatio },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(CircleShape),
+                                    color = SystemOrange,
+                                    trackColor = SystemGray5
+                                )
+                                Text(
+                                    text = "${badge.currentProgress}/${badge.maxProgress}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = SystemLabelSecondary
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun AchievementFilterPill(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (isSelected) SystemBlue else SystemSurface,
+        border = androidx.compose.foundation.BorderStroke(
+            width = 0.5.dp,
+            color = if (isSelected) SystemBlue else SystemDivider
+        ),
+        modifier = Modifier
+            .clickable {
+                HapticManager.performClick(context)
+                onClick()
+            }
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) Color.White else SystemLabelSecondary,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+        )
     }
 }
 
@@ -1243,114 +1407,6 @@ fun WeeklyActivityVisualizer(taskList: List<TaskItem>) {
                 }
             }
         }
-    }
-}
-
-@Composable
-fun TaskFlowProCard(
-    lastSyncTimestamp: String,
-    isSyncing: Boolean,
-    syncRotation: Float,
-    onSyncNowClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = Color(0xFF1C1C1E),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF38383A)),
-        shadowElevation = 4.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(Color(0xFF242428), Color(0xFF141416), Color(0xFF1E1E24))
-                    )
-                )
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            // Header Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.CloudDone,
-                        contentDescription = "Cloud Vault",
-                        tint = Color(0xFF0A84FF),
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Column {
-                        Text(
-                            text = "iCloud Vault & Pro Sync",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "Last synced: $lastSyncTimestamp",
-                            fontSize = 12.sp,
-                            color = Color(0xFF8E8E93)
-                        )
-                    }
-                }
-
-                // Sync Now Trigger Button
-                IconButton(
-                    onClick = onSyncNowClick,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Sync,
-                        contentDescription = "Sync Now",
-                        tint = Color(0xFF0A84FF),
-                        modifier = Modifier
-                            .size(22.dp)
-                            .rotate(syncRotation)
-                    )
-                }
-            }
-
-            HorizontalDivider(color = Color(0x33FFFFFF), thickness = 0.5.dp)
-
-            // Features Checklist
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                ProFeatureTag(label = "Unlimited Lists")
-                ProFeatureTag(label = "Smart NLP Due Dates")
-                ProFeatureTag(label = "Biometric Vault")
-            }
-        }
-    }
-}
-
-@Composable
-fun ProFeatureTag(label: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Filled.Check,
-            contentDescription = "Included",
-            tint = Color(0xFF30D158),
-            modifier = Modifier.size(13.dp)
-        )
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color(0xFFE5E5EA)
-        )
     }
 }
 

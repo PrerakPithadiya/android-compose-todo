@@ -17,10 +17,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.todo_list.security.BiometricAuthHelper
 import com.example.todo_list.ui.theme.SystemBlue
 import com.example.todo_list.ui.theme.SystemGray
 import com.example.todo_list.ui.theme.SystemGray5
@@ -39,9 +41,13 @@ fun IosKeypad(
     onDeleteClick: () -> Unit,
     onCancelClick: (() -> Unit)? = null,
     onBiometricClick: (() -> Unit)? = null,
+    biometricIcon: ImageVector? = null,
+    biometricContentDescription: String? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val resolvedBiometricIcon = biometricIcon ?: BiometricAuthHelper.getBiometricIcon(context)
+    val resolvedBiometricDesc = biometricContentDescription ?: "Unlock with ${BiometricAuthHelper.getBiometricDisplayName(context)}"
 
     Column(
         modifier = modifier
@@ -94,8 +100,8 @@ fun IosKeypad(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Fingerprint,
-                            contentDescription = "Scan Fingerprint",
+                            imageVector = resolvedBiometricIcon,
+                            contentDescription = resolvedBiometricDesc,
                             tint = SystemBlue,
                             modifier = Modifier.size(32.dp)
                         )

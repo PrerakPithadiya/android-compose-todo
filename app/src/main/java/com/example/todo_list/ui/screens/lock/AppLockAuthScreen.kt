@@ -8,8 +8,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -71,13 +73,23 @@ fun AppLockAuthScreen(
     val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
-    val triggerBiometricPrompt: () -> Unit = remember(activity) {
+    val biometricSubtitle = remember(context) {
+        BiometricAuthHelper.getBiometricPromptSubtitle(context)
+    }
+    val biometricIcon = remember(context) {
+        BiometricAuthHelper.getBiometricIcon(context)
+    }
+    val biometricDisplayName = remember(context) {
+        BiometricAuthHelper.getBiometricDisplayName(context)
+    }
+
+    val triggerBiometricPrompt: () -> Unit = remember(activity, biometricSubtitle) {
         {
             if (activity != null && AppLockManager.isBiometricEnabled) {
                 BiometricAuthHelper.promptBiometric(
                     activity = activity,
                     title = "Unlock TaskFlow",
-                    subtitle = "Touch fingerprint sensor to continue",
+                    subtitle = biometricSubtitle,
                     negativeButtonText = "Use Passcode",
                     onSuccess = {
                         AppLockManager.unlock()
@@ -139,6 +151,8 @@ fun AppLockAuthScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
@@ -237,6 +251,8 @@ fun AppLockAuthScreen(
                                 }
                             },
                             onBiometricClick = if (AppLockManager.isBiometricEnabled) triggerBiometricPrompt else null,
+                            biometricIcon = biometricIcon,
+                            biometricContentDescription = "Unlock with $biometricDisplayName",
                             onCancelClick = null
                         )
                     }
@@ -270,8 +286,8 @@ fun AppLockAuthScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Outlined.Fingerprint,
-                                    contentDescription = "Scan Fingerprint",
+                                    imageVector = biometricIcon,
+                                    contentDescription = "Unlock with $biometricDisplayName",
                                     tint = SystemBlue,
                                     modifier = Modifier.size(28.dp)
                                 )
@@ -350,8 +366,8 @@ fun AppLockAuthScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Outlined.Fingerprint,
-                                        contentDescription = "Scan Fingerprint",
+                                        imageVector = biometricIcon,
+                                        contentDescription = "Unlock with $biometricDisplayName",
                                         tint = SystemBlue,
                                         modifier = Modifier.size(26.dp)
                                     )

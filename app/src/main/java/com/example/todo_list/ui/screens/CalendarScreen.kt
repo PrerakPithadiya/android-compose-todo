@@ -835,7 +835,10 @@ fun CalendarTaskCardItem(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = task.time,
+                                text = com.example.todo_list.utils.TimeFormatHelper.formatTimeForDisplay(
+                                    task.time,
+                                    com.example.todo_list.manager.TimePreferencesManager.is24HourFormat
+                                ),
                                 fontSize = 12.sp,
                                 color = SystemLabelSecondary
                             )

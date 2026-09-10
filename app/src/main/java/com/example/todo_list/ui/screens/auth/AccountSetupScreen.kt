@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.*
@@ -35,6 +36,7 @@ import com.example.todo_list.manager.UserProfileManager
 import com.example.todo_list.security.AuthManager
 import com.example.todo_list.ui.theme.*
 import com.example.todo_list.utils.HapticManager
+import kotlinx.coroutines.launch
 
 /**
  * Step 3 of Registration: Setting up Full Name, Username & Password (Apple HIG).
@@ -47,6 +49,7 @@ fun AccountSetupScreen(
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
 
     var name by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
@@ -62,20 +65,24 @@ fun AccountSetupScreen(
         if (trimmed.startsWith("@")) trimmed else if (trimmed.isNotEmpty()) "@$trimmed" else ""
     }
 
-    val isPasswordValid = remember(password) { password.length >= 6 }
-    val isPasswordMatch = remember(password, confirmPassword) { password == confirmPassword && password.isNotEmpty() }
-    val isFormValid = remember(name, username, isPasswordValid, isPasswordMatch) {
-        name.trim().length >= 2 && username.trim().length >= 3 && isPasswordValid && isPasswordMatch
+    val hasMinLength = password.length >= 8
+    val hasNumber = password.any { it.isDigit() }
+    val hasSpecialOrUpper = password.any { !it.isLetterOrDigit() || it.isUpperCase() }
+    val passwordsMatch = password.isNotEmpty() && password == confirmPassword
+    val isPasswordValid = hasMinLength && hasNumber && hasSpecialOrUpper && passwordsMatch
+
+    val isFormValid = remember(name, username, isPasswordValid) {
+        name.trim().length >= 2 && username.trim().length >= 3 && isPasswordValid
     }
 
-    // Password strength evaluator
-    val passwordStrength = remember(password) {
-        when {
-            password.length < 6 -> 0 // Invalid / Too short
-            password.length < 8 -> 1 // Weak
-            password.any { it.isDigit() } && password.any { !it.isLetterOrDigit() } -> 3 // Strong
-            else -> 2 // Medium
-        }
+    // Password strength score (0 to 4)
+    val strengthScore = remember(password) {
+        var score = 0
+        if (hasMinLength) score++
+        if (hasNumber) score++
+        if (hasSpecialOrUpper) score++
+        if (password.length >= 12) score++
+        score
     }
 
     Column(
@@ -84,6 +91,7 @@ fun AccountSetupScreen(
             .background(SystemGroupedBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -203,7 +211,7 @@ fun AccountSetupScreen(
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Password (min 6 characters)") },
+                        label = { Text("Password (min 8 characters)") },
                         leadingIcon = {
                             Icon(imageVector = Icons.Outlined.Lock, contentDescription = "Password", tint = SystemBlue)
                         },
@@ -271,64 +279,89 @@ fun AccountSetupScreen(
                 }
             }
 
-            // Password Strength Indicator
+            // Live Password Strength Bar
             if (password.isNotEmpty()) {
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        for (i in 1..3) {
-                            val activeColor = when (passwordStrength) {
-                                1 -> SystemRed
-                                2 -> AppleStudy
-                                3 -> SystemGreen
-                                else -> SystemGray5
+                        Text(
+                            text = "Password Strength",
+                            fontSize = 12.sp,
+                            color = SystemLabelSecondary
+                        )
+                        Text(
+                            text = when (strengthScore) {
+                                0, 1 -> "Weak"
+                                2 -> "Fair"
+                                3 -> "Good"
+                                else -> "Strong"
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = when (strengthScore) {
+                                0, 1 -> SystemRed
+                                2 -> SystemOrange
+                                3 -> SystemBlue
+                                else -> SystemGreen
                             }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        for (i in 1..4) {
+                            val isFilled = i <= strengthScore
                             Box(
                                 modifier = Modifier
-                                    .width(36.dp)
+                                    .weight(1f)
                                     .height(4.dp)
-                                    .clip(CircleShape)
-                                    .background(if (i <= passwordStrength) activeColor else SystemGray5)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(
+                                        if (isFilled) {
+                                            when (strengthScore) {
+                                                1 -> SystemRed
+                                                2 -> SystemOrange
+                                                3 -> SystemBlue
+                                                else -> SystemGreen
+                                            }
+                                        } else {
+                                            SystemDivider
+                                        }
+                                    )
                             )
                         }
                     }
-
-                    Text(
-                        text = when (passwordStrength) {
-                            1 -> "Weak"
-                            2 -> "Good"
-                            3 -> "Strong"
-                            else -> "Too Short"
-                        },
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = when (passwordStrength) {
-                            1 -> SystemRed
-                            2 -> AppleStudy
-                            3 -> SystemGreen
-                            else -> SystemLabelTertiary
-                        }
-                    )
                 }
             }
 
-            // Password mismatch error
-            if (confirmPassword.isNotEmpty() && !isPasswordMatch) {
-                Text(
-                    text = "Passwords do not match",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SystemRed,
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                )
+            // 4 Strict Password Rules Checklist
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                AccountSetupRequirementItem(label = "At least 8 characters", isMet = hasMinLength)
+                AccountSetupRequirementItem(label = "Contains at least 1 number", isMet = hasNumber)
+                AccountSetupRequirementItem(label = "Contains uppercase letter or symbol", isMet = hasSpecialOrUpper)
+                AccountSetupRequirementItem(label = "Passwords match", isMet = passwordsMatch)
             }
+        }
 
+        // Bottom Actions Section
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // Complete Registration CTA Button
             Button(
                 onClick = {
@@ -340,29 +373,23 @@ fun AccountSetupScreen(
                     isSubmitting = true
                     focusManager.clearFocus()
 
-                    val success = AuthManager.registerAccount(
-                        name = name,
-                        username = cleanUsername,
-                        phone = verifiedPhone,
-                        password = password
-                    )
-
-                    if (success) {
-                        // Sync with UserProfileManager
-                        UserProfileManager.updateProfile(
+                    coroutineScope.launch {
+                        val success = AuthManager.registerAccount(
                             name = name,
                             username = cleanUsername,
-                            email = "${cleanUsername.removePrefix("@").lowercase()}@taskflow.app",
                             phone = verifiedPhone,
-                            bio = "Productivity Architect • Building minimal, powerful tools ⚡"
+                            password = password
                         )
-                        HapticManager.performSuccess(context)
-                        Toast.makeText(context, "Account created successfully! Welcome to TaskFlow 🎉", Toast.LENGTH_LONG).show()
-                        onRegistrationComplete()
-                    } else {
-                        HapticManager.performError(context)
-                        Toast.makeText(context, "Failed to create account. Please try again.", Toast.LENGTH_SHORT).show()
-                        isSubmitting = false
+
+                        if (success) {
+                            HapticManager.performSuccess(context)
+                            Toast.makeText(context, "Account created successfully! Welcome to TaskFlow 🎉", Toast.LENGTH_LONG).show()
+                            onRegistrationComplete()
+                        } else {
+                            HapticManager.performError(context)
+                            Toast.makeText(context, "Username or phone number already in use. Please try again.", Toast.LENGTH_SHORT).show()
+                            isSubmitting = false
+                        }
                     }
                 },
                 enabled = isFormValid && !isSubmitting,
@@ -382,15 +409,35 @@ fun AccountSetupScreen(
                     color = Color.White
                 )
             }
-        }
 
-        // Bottom Security Note
+            // Bottom Security Note
+            Text(
+                text = "By continuing, you agree to TaskFlow's Terms of Service and Privacy Policy.",
+                fontSize = 12.sp,
+                color = SystemLabelTertiary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun AccountSetupRequirementItem(label: String, isMet: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            imageVector = if (isMet) Icons.Filled.Check else Icons.Outlined.Circle,
+            contentDescription = null,
+            tint = if (isMet) SystemGreen else SystemLabelSecondary.copy(alpha = 0.5f),
+            modifier = Modifier.size(14.dp)
+        )
         Text(
-            text = "By continuing, you agree to TaskFlow's Terms of Service and Privacy Policy.",
+            text = label,
             fontSize = 12.sp,
-            color = SystemLabelTertiary,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.padding(bottom = 8.dp)
+            color = if (isMet) SystemGreen else SystemLabelSecondary
         )
     }
 }

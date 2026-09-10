@@ -74,6 +74,7 @@ fun ForgotPasswordSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
@@ -141,40 +142,25 @@ fun ForgotPasswordSheet(
                                 Toast.makeText(context, "Please enter a valid phone number", Toast.LENGTH_SHORT).show()
                                 return@Button
                             }
-                            val isRegistered = AuthManager.isRegisteredPhone(phoneInput)
-                            if (!isRegistered) {
-                                HapticManager.performError(context)
-                                Toast.makeText(context, "This phone number is not linked to any account", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-                            focusManager.clearFocus()
                             coroutineScope.launch {
-                                isSending = true
-                                val (otp, deliveryResult) = AuthManager.sendRealSmsOtp(phoneInput)
-                                isSending = false
+                                val isRegistered = AuthManager.isRegisteredPhone(phoneInput)
+                                if (!isRegistered) {
+                                    HapticManager.performError(context)
+                                    Toast.makeText(context, "This phone number is not linked to any account", Toast.LENGTH_SHORT).show()
+                                    return@launch
+                                }
+                                focusManager.clearFocus()
+                                val otp = AuthManager.sendOtp(phoneInput)
                                 onOtpDispatched(otp)
                                 HapticManager.performSuccess(context)
                                 step = 1
-                                when (deliveryResult) {
-                                    is com.example.todo_list.security.SmsDeliveryResult.Success -> {
-                                        Toast.makeText(context, "Real SMS sent to $phoneInput", Toast.LENGTH_SHORT).show()
-                                    }
-                                    is com.example.todo_list.security.SmsDeliveryResult.Failure -> {
-                                        Toast.makeText(context, "Fast2SMS: ${deliveryResult.errorMessage}", Toast.LENGTH_LONG).show()
-                                    }
-                                }
                             }
                         },
-                        enabled = !isSending,
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
                         modifier = Modifier.fillMaxWidth().height(50.dp)
                     ) {
-                        if (isSending) {
-                            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                        } else {
-                            Text("Send Reset Code", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        }
+                        Text("Send Reset Code", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
 
@@ -194,7 +180,11 @@ fun ForgotPasswordSheet(
                         length = 6,
                         isError = isOtpError,
                         onComplete = { code ->
-                            if (AuthManager.verifyOtp(code)) {
+                            if (AuthManager.isOtpExpired()) {
+                                HapticManager.performError(context)
+                                isOtpError = true
+                                Toast.makeText(context, "Code has expired. Please request a new reset code.", Toast.LENGTH_SHORT).show()
+                            } else if (AuthManager.verifyOtp(code)) {
                                 HapticManager.performSuccess(context)
                                 step = 2
                             } else {
@@ -207,7 +197,11 @@ fun ForgotPasswordSheet(
 
                     Button(
                         onClick = {
-                            if (AuthManager.verifyOtp(otpInput)) {
+                            if (AuthManager.isOtpExpired()) {
+                                HapticManager.performError(context)
+                                isOtpError = true
+                                Toast.makeText(context, "Code has expired. Please request a new reset code.", Toast.LENGTH_SHORT).show()
+                            } else if (AuthManager.verifyOtp(otpInput)) {
                                 HapticManager.performSuccess(context)
                                 step = 2
                             } else {
@@ -303,10 +297,12 @@ fun ForgotPasswordSheet(
                                 Toast.makeText(context, "Passwords do not match", Toast.LENGTH_SHORT).show()
                                 return@Button
                             }
-                            AuthManager.resetPassword(newPassword)
-                            HapticManager.performSuccess(context)
-                            Toast.makeText(context, "Password reset successfully! You can now log in.", Toast.LENGTH_LONG).show()
-                            onPasswordResetComplete()
+                            coroutineScope.launch {
+                                AuthManager.resetPassword(newPassword)
+                                HapticManager.performSuccess(context)
+                                Toast.makeText(context, "Password reset successfully! You can now log in.", Toast.LENGTH_LONG).show()
+                                onPasswordResetComplete()
+                            }
                         },
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),

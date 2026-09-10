@@ -39,6 +39,12 @@ fun AuthScreen(
     var activeOtpCode by remember { mutableStateOf("") }
     var showOtpBanner by remember { mutableStateOf(false) }
 
+    LaunchedEffect(AuthManager.isAccountCreated) {
+        if (AuthManager.isAccountCreated && currentStep == AuthFlowStep.REGISTER_PHONE && pendingPhoneNumber.isEmpty()) {
+            currentStep = AuthFlowStep.LOGIN
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()

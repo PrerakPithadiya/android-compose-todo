@@ -6,49 +6,43 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.todo_list.data.local.AppDatabase
+import com.example.todo_list.data.local.entity.UserEntity
 import com.example.todo_list.model.AchievementBadge
 import com.example.todo_list.model.AvatarPreset
 import com.example.todo_list.model.UserProfile
+import com.example.todo_list.security.AuthManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
  * Reactive Singleton Manager for persistent User Profile, Gamification XP,
- * Streaks, and Apple-style Achievements.
+ * Streaks, and Apple-style Achievements backed by Room SQLite 'users' table.
  */
 object UserProfileManager {
     private const val PREFS_NAME = "taskflow_user_profile_prefs"
 
-    private const val KEY_NAME = "key_profile_name"
-    private const val KEY_USERNAME = "key_profile_username"
-    private const val KEY_EMAIL = "key_profile_email"
-    private const val KEY_PHONE = "key_profile_phone"
-    private const val KEY_BIO = "key_profile_bio"
-    private const val KEY_AVATAR_PRESET_ID = "key_profile_avatar_preset_id"
-    private const val KEY_CUSTOM_AVATAR_URI = "key_profile_custom_avatar_uri"
-    private const val KEY_FOCUS_STATUS = "key_profile_focus_status"
-    private const val KEY_DAILY_GOAL = "key_profile_daily_goal"
-    private const val KEY_MORNING_DIGEST = "key_profile_morning_digest"
-    private const val KEY_XP_POINTS = "key_profile_xp_points"
-    private const val KEY_CURRENT_STREAK = "key_profile_current_streak"
-    private const val KEY_BEST_STREAK = "key_profile_best_streak"
     private const val KEY_LAST_SYNC_TIME = "key_profile_last_sync"
     private const val KEY_UNLOCKED_BADGES = "key_profile_unlocked_badges"
 
     private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
 
     // Reactive Compose State
     var profile by mutableStateOf(UserProfile())
         private set
 
-    var xpPoints by mutableIntStateOf(3850)
+    var xpPoints by mutableIntStateOf(0)
         private set
 
-    var currentStreak by mutableIntStateOf(14)
+    var currentStreak by mutableIntStateOf(0)
         private set
 
-    var bestStreak by mutableIntStateOf(28)
+    var bestStreak by mutableIntStateOf(0)
         private set
 
     var lastSyncTimestamp by mutableStateOf("Just now")
@@ -58,175 +52,144 @@ object UserProfileManager {
         private set
 
     fun initialize(context: Context) {
+        appContext = context.applicationContext
         if (prefs == null) {
             prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            reloadState()
+            lastSyncTimestamp = prefs?.getString(KEY_LAST_SYNC_TIME, "Just now") ?: "Just now"
         }
     }
 
-    private fun reloadState() {
-        prefs?.let { p ->
-            val defaultName = if (com.example.todo_list.security.AuthManager.isAccountCreated && com.example.todo_list.security.AuthManager.registeredName.isNotEmpty()) {
-                com.example.todo_list.security.AuthManager.registeredName
-            } else {
-                "Prerak Pithadiya"
-            }
-            val defaultUsername = if (com.example.todo_list.security.AuthManager.isAccountCreated && com.example.todo_list.security.AuthManager.registeredUsername.isNotEmpty()) {
-                com.example.todo_list.security.AuthManager.registeredUsername
-            } else {
-                "@prerak"
-            }
-            val defaultEmail = if (com.example.todo_list.security.AuthManager.isAccountCreated && com.example.todo_list.security.AuthManager.registeredEmail.isNotEmpty()) {
-                com.example.todo_list.security.AuthManager.registeredEmail
-            } else {
-                "prerak@taskflow.app"
-            }
-            val defaultPhone = if (com.example.todo_list.security.AuthManager.isAccountCreated && com.example.todo_list.security.AuthManager.registeredPhone.isNotEmpty()) {
-                com.example.todo_list.security.AuthManager.registeredPhone
-            } else {
-                "+1 (555) 382-9012"
-            }
+    /**
+     * Loads the profile and stats for the active user account from SQLite.
+     */
+    fun loadUserProfile(user: UserEntity?) {
+        if (user == null) {
+            profile = UserProfile()
+            xpPoints = 0
+            currentStreak = 0
+            bestStreak = 0
+            return
+        }
 
-            val name = p.getString(KEY_NAME, defaultName) ?: defaultName
-            val username = p.getString(KEY_USERNAME, defaultUsername) ?: defaultUsername
-            val email = p.getString(KEY_EMAIL, defaultEmail) ?: defaultEmail
-            val phone = p.getString(KEY_PHONE, defaultPhone) ?: defaultPhone
-            val bio = p.getString(
-                KEY_BIO,
-                "Productivity Architect & Android Developer • Building minimal, powerful tools ⚡"
-            ) ?: "Productivity Architect & Android Developer • Building minimal, powerful tools ⚡"
-            val avatarPresetId = p.getInt(KEY_AVATAR_PRESET_ID, 0)
-            val customAvatarUri = p.getString(KEY_CUSTOM_AVATAR_URI, null)
-            val focusStatus = p.getString(KEY_FOCUS_STATUS, "🎯 Deep Work") ?: "🎯 Deep Work"
-            val dailyGoal = p.getInt(KEY_DAILY_GOAL, 5)
-            val morningDigest = p.getString(KEY_MORNING_DIGEST, "08:00 AM") ?: "08:00 AM"
+        profile = UserProfile(
+            name = user.name,
+            username = user.username,
+            email = user.email,
+            phone = user.phone,
+            bio = user.bio,
+            avatarPresetId = user.avatarPresetId,
+            customAvatarUri = user.customAvatarUri,
+            focusStatus = user.focusStatus,
+            userTier = user.userTier,
+            memberSince = user.memberSince,
+            dailyTaskGoal = user.dailyTaskGoal,
+            morningDigestTime = user.morningDigestTime,
+            autoCloudSync = user.autoCloudSync
+        )
+        xpPoints = user.xpPoints
+        currentStreak = user.currentStreak
+        bestStreak = user.bestStreak
+    }
 
-            profile = UserProfile(
-                name = name,
-                username = username,
-                email = email,
-                phone = phone,
-                bio = bio,
-                avatarPresetId = avatarPresetId,
-                customAvatarUri = customAvatarUri,
-                focusStatus = focusStatus,
-                dailyTaskGoal = dailyGoal,
-                morningDigestTime = morningDigest
+    private fun syncUserToDatabase() {
+        val user = AuthManager.currentUser ?: return
+        val ctx = appContext ?: return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val dao = AppDatabase.getInstance(ctx).userDao()
+            dao.updateUserProfile(
+                userId = user.id,
+                name = profile.name,
+                username = profile.username,
+                email = profile.email,
+                bio = profile.bio,
+                avatarPresetId = profile.avatarPresetId,
+                customAvatarUri = profile.customAvatarUri,
+                focusStatus = profile.focusStatus,
+                dailyGoal = profile.dailyTaskGoal
             )
-
-            xpPoints = p.getInt(KEY_XP_POINTS, 3850)
-            currentStreak = p.getInt(KEY_CURRENT_STREAK, 14)
-            bestStreak = p.getInt(KEY_BEST_STREAK, 28)
-            lastSyncTimestamp = p.getString(KEY_LAST_SYNC_TIME, "Just now") ?: "Just now"
-
-            // Reload unlocked badges
-            val unlockedSet = p.getStringSet(KEY_UNLOCKED_BADGES, null)
-            if (unlockedSet != null) {
-                achievements = achievements.map { badge ->
-                    if (unlockedSet.contains(badge.id)) {
-                        badge.copy(isUnlocked = true)
-                    } else {
-                        badge
-                    }
-                }
-            }
+            dao.updateUserStats(
+                userId = user.id,
+                xp = xpPoints,
+                streak = currentStreak,
+                bestStreak = bestStreak
+            )
         }
     }
 
     fun updateProfile(
-        name: String,
-        username: String,
-        email: String,
-        phone: String,
-        bio: String
+        name: String = profile.name,
+        username: String = profile.username,
+        email: String = profile.email,
+        phone: String = profile.phone,
+        bio: String = profile.bio
     ) {
         val updated = profile.copy(
-            name = name.trim(),
-            username = if (username.startsWith("@")) username.trim() else "@${username.trim()}",
-            email = email.trim(),
-            phone = phone.trim(),
-            bio = bio.trim()
+            name = name,
+            username = username,
+            email = email,
+            phone = phone,
+            bio = bio
         )
         profile = updated
-        prefs?.edit()
-            ?.putString(KEY_NAME, updated.name)
-            ?.putString(KEY_USERNAME, updated.username)
-            ?.putString(KEY_EMAIL, updated.email)
-            ?.putString(KEY_PHONE, updated.phone)
-            ?.putString(KEY_BIO, updated.bio)
-            ?.apply()
+        syncUserToDatabase()
     }
 
     fun setAvatarPreset(presetId: Int) {
         val updated = profile.copy(avatarPresetId = presetId, customAvatarUri = null)
         profile = updated
-        prefs?.edit()
-            ?.putInt(KEY_AVATAR_PRESET_ID, presetId)
-            ?.remove(KEY_CUSTOM_AVATAR_URI)
-            ?.apply()
+        syncUserToDatabase()
     }
 
     fun setCustomAvatarUri(uri: String?) {
         val updated = profile.copy(customAvatarUri = uri)
         profile = updated
-        if (uri != null) {
-            prefs?.edit()?.putString(KEY_CUSTOM_AVATAR_URI, uri)?.apply()
-        } else {
-            prefs?.edit()?.remove(KEY_CUSTOM_AVATAR_URI)?.apply()
-        }
+        syncUserToDatabase()
     }
 
     fun setFocusStatus(status: String) {
         val updated = profile.copy(focusStatus = status)
         profile = updated
-        prefs?.edit()?.putString(KEY_FOCUS_STATUS, status)?.apply()
+        syncUserToDatabase()
     }
 
     fun setDailyGoal(goal: Int) {
         val updated = profile.copy(dailyTaskGoal = goal)
         profile = updated
-        prefs?.edit()?.putInt(KEY_DAILY_GOAL, goal)?.apply()
+        syncUserToDatabase()
     }
 
     fun setMorningDigestTime(time: String) {
         val updated = profile.copy(morningDigestTime = time)
         profile = updated
-        prefs?.edit()?.putString(KEY_MORNING_DIGEST, time)?.apply()
+        syncUserToDatabase()
     }
 
     fun addXp(amount: Int) {
         val newXp = xpPoints + amount
         xpPoints = newXp
-        prefs?.edit()?.putInt(KEY_XP_POINTS, newXp)?.apply()
+        val user = AuthManager.currentUser
+        val ctx = appContext
+        if (user != null && ctx != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val dao = AppDatabase.getInstance(ctx).userDao()
+                dao.updateUserStats(user.id, newXp, currentStreak, bestStreak)
+            }
+        }
     }
 
     fun getAvatarUrl(): String {
         return profile.customAvatarUri ?: AvatarPreset.getById(profile.avatarPresetId).avatarUrl
     }
 
-    /**
-     * Compute current level based on XP (500 XP per level).
-     */
     fun getLevel(): Int = (xpPoints / 500) + 1
 
-    /**
-     * Current progress towards the next level [0..499].
-     */
     fun getLevelCurrentXp(): Int = xpPoints % 500
 
-    /**
-     * Total XP needed per level.
-     */
     fun getLevelMaxXp(): Int = 500
 
-    /**
-     * Level progress ratio [0f..1f].
-     */
     fun getLevelProgressRatio(): Float = getLevelCurrentXp().toFloat() / getLevelMaxXp()
 
-    /**
-     * Level title string based on user mastery.
-     */
     fun getLevelTitle(): String {
         return when (getLevel()) {
             1 -> "Focus Initiate"
@@ -267,11 +230,10 @@ object UserProfileManager {
     }
 
     fun resetProfileToDefaults() {
-        prefs?.edit()?.clear()?.apply()
         profile = UserProfile()
-        xpPoints = 3850
-        currentStreak = 14
-        bestStreak = 28
+        xpPoints = 0
+        currentStreak = 0
+        bestStreak = 0
         lastSyncTimestamp = "Just now"
         achievements = AchievementBadge.DEFAULT_ACHIEVEMENTS
     }

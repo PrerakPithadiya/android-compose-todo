@@ -43,6 +43,7 @@ import com.example.todo_list.security.AuthManager
 import com.example.todo_list.security.BiometricAuthHelper
 import com.example.todo_list.security.BiometricAvailability
 import com.example.todo_list.ui.theme.*
+import kotlinx.coroutines.launch
 import com.example.todo_list.utils.HapticManager
 
 /**
@@ -58,6 +59,7 @@ fun LoginScreen(
     val context = LocalContext.current
     val activity = context as? FragmentActivity
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
 
     var identifier by remember { mutableStateOf(AuthManager.registeredUsername.ifEmpty { "" }) }
     var password by remember { mutableStateOf("") }
@@ -76,18 +78,20 @@ fun LoginScreen(
             isLoggingIn = true
             focusManager.clearFocus()
 
-            val success = AuthManager.login(identifier, password)
-            if (success) {
-                HapticManager.performSuccess(context)
-                isError = false
-                isLoggingIn = false
-                Toast.makeText(context, "Welcome back, ${AuthManager.registeredName.ifEmpty { "User" }}! 👋", Toast.LENGTH_SHORT).show()
-                onLoginSuccess()
-            } else {
-                HapticManager.performError(context)
-                isError = true
-                errorMessage = "Incorrect username or password. Please try again."
-                isLoggingIn = false
+            coroutineScope.launch {
+                val success = AuthManager.login(identifier, password)
+                if (success) {
+                    HapticManager.performSuccess(context)
+                    isError = false
+                    isLoggingIn = false
+                    Toast.makeText(context, "Welcome back, ${AuthManager.registeredName.ifEmpty { "User" }}! 👋", Toast.LENGTH_SHORT).show()
+                    onLoginSuccess()
+                } else {
+                    HapticManager.performError(context)
+                    isError = true
+                    errorMessage = "Incorrect username, phone, or password. Please try again."
+                    isLoggingIn = false
+                }
             }
         }
     }
@@ -96,20 +100,15 @@ fun LoginScreen(
         if (activity != null) {
             val status = BiometricAuthHelper.checkBiometricAvailability(context)
             if (status == BiometricAvailability.AVAILABLE) {
+                val bioName = BiometricAuthHelper.getBiometricDisplayName(context)
                 BiometricAuthHelper.promptBiometric(
                     activity = activity,
                     title = "Sign In to TaskFlow",
-                    subtitle = "Verify your fingerprint to continue",
+                    subtitle = BiometricAuthHelper.getBiometricPromptSubtitle(context),
                     negativeButtonText = "Use Password",
                     onSuccess = {
                         HapticManager.performSuccess(context)
-                        // Log in using biometric identity
-                        AuthManager.login(AuthManager.registeredUsername, "") // session update
-                        // Mark session logged in directly
-                        val p = context.getSharedPreferences("taskflow_auth_prefs", android.content.Context.MODE_PRIVATE)
-                        p.edit().putBoolean("key_is_logged_in", true).apply()
-                        AuthManager.initialize(context)
-                        Toast.makeText(context, "Biometric sign-in successful! Welcome back 🎉", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "$bioName sign-in successful! Welcome back 🎉", Toast.LENGTH_SHORT).show()
                         onLoginSuccess()
                     },
                     onError = { _ -> }
@@ -124,6 +123,7 @@ fun LoginScreen(
             .background(SystemGroupedBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -313,8 +313,8 @@ fun LoginScreen(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Outlined.Fingerprint,
-                                contentDescription = "Biometric Sign-In",
+                                imageVector = BiometricAuthHelper.getBiometricIcon(context),
+                                contentDescription = "Sign In with ${BiometricAuthHelper.getBiometricDisplayName(context)}",
                                 tint = SystemBlue,
                                 modifier = Modifier.size(28.dp)
                             )

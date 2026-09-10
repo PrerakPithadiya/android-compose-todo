@@ -50,6 +50,10 @@ import com.example.todo_list.ui.screens.lock.SetupStep
 import com.example.todo_list.ui.theme.*
 import com.example.todo_list.utils.HapticIntensity
 import com.example.todo_list.utils.HapticManager
+import com.example.todo_list.manager.TimePreferencesManager
+import com.example.todo_list.model.WorldLocation
+import com.example.todo_list.ui.components.TimezonePickerBottomSheet
+import com.example.todo_list.utils.TimeFormatHelper
 import androidx.fragment.app.FragmentActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,6 +100,7 @@ fun SettingsScreen(
     var appLockSetupStep by remember { mutableStateOf(SetupStep.SELECT_LOCK_TYPE) }
     var showLockTimeoutSheet by remember { mutableStateOf(false) }
     var showEnrollBiometricDialog by remember { mutableStateOf(false) }
+    var showChangePasswordSheet by remember { mutableStateOf(false) }
 
     // Dialog & Modal sheet states
     var showEditProfileSheet by remember { mutableStateOf(false) }
@@ -107,6 +112,7 @@ fun SettingsScreen(
     var showResetDataDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
+    var showTimezonePickerSheet by remember { mutableStateOf(false) }
 
     val totalTasks = remember(taskList) { taskList.size }
     val completedCount = remember(taskList) { taskList.count { it.isCompleted } }
@@ -233,7 +239,7 @@ fun SettingsScreen(
                             icon = Icons.Outlined.AccessTime,
                             iconTint = SystemBlue,
                             title = "Default Due Time",
-                            value = defaultDueTime,
+                            value = TimeFormatHelper.formatTimeForDisplay(defaultDueTime, TimePreferencesManager.is24HourFormat),
                             onClick = { showTimePickerSheet = true },
                             showDivider = true
                         )
@@ -244,6 +250,76 @@ fun SettingsScreen(
                             value = autoArchiveOption,
                             onClick = { showAutoArchiveSheet = true },
                             showDivider = false
+                        )
+                    }
+                }
+            }
+
+            // Date, Time & Region Settings Group
+            item(key = "settings_time_region_group") {
+                val currentLoc = TimePreferencesManager.selectedLocation
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionHeaderTitle(title = "DATE, TIME & REGION")
+                    SettingsGroupCard {
+                        // 12-Hour vs 24-Hour Format Switcher
+                        SettingsSegmentedRow(
+                            icon = Icons.Outlined.Schedule,
+                            iconTint = SystemBlue,
+                            title = "Time Format",
+                            options = listOf("12-Hour (AM/PM)", "24-Hour"),
+                            selectedIndex = if (TimePreferencesManager.is24HourFormat) 1 else 0,
+                            accentColor = SystemBlue,
+                            onOptionSelected = { idx ->
+                                TimePreferencesManager.setTimeFormat(idx == 1)
+                                HapticManager.performClick(context)
+                            },
+                            showDivider = true
+                        )
+
+                        // Set Automatically (Time Zone Detection)
+                        SettingsSwitchRow(
+                            icon = Icons.Outlined.Public,
+                            iconTint = AppleHealth,
+                            title = "Set Automatically",
+                            subtitle = if (TimePreferencesManager.isAutoDetectEnabled) {
+                                "Using device location: ${currentLoc.cityName}, ${currentLoc.countryName}"
+                            } else {
+                                "Manual time zone selection active"
+                            },
+                            checked = TimePreferencesManager.isAutoDetectEnabled,
+                            accentColor = SystemBlue,
+                            onCheckedChange = { isEnabled ->
+                                TimePreferencesManager.setAutoDetectEnabled(isEnabled, context)
+                                val msg = if (isEnabled) "Auto-detection enabled" else "Manual time zone mode active"
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            },
+                            showDivider = true
+                        )
+
+                        // Region & City Selection Row
+                        SettingsValueRow(
+                            icon = Icons.Outlined.LocationOn,
+                            iconTint = AppleStudy,
+                            title = "Region & City",
+                            value = "${currentLoc.flagEmoji} ${currentLoc.cityName}, ${currentLoc.countryName}",
+                            onClick = { showTimezonePickerSheet = true },
+                            showDivider = true
+                        )
+
+                        // Time Zone details
+                        SettingsValueRow(
+                            icon = Icons.Outlined.Language,
+                            iconTint = SystemBlue,
+                            title = "Time Zone",
+                            value = "${currentLoc.timeZoneAbbr} (${currentLoc.utcOffsetStr})",
+                            onClick = { showTimezonePickerSheet = true },
+                            showDivider = true
+                        )
+
+                        // Live World Clock Inset Card
+                        TimePreviewWidgetRow(
+                            location = currentLoc,
+                            is24Hour = TimePreferencesManager.is24HourFormat
                         )
                     }
                 }
@@ -350,11 +426,13 @@ fun SettingsScreen(
                         )
 
                         if (AppLockManager.isLockEnabled) {
+                            val bioDisplayName = BiometricAuthHelper.getBiometricDisplayName(context)
+                            val bioIcon = BiometricAuthHelper.getBiometricIcon(context)
                             SettingsSwitchRow(
-                                icon = Icons.Outlined.Fingerprint,
+                                icon = bioIcon,
                                 iconTint = AppleHealth,
-                                title = "Unlock with Fingerprint",
-                                subtitle = if (AppLockManager.isBiometricEnabled) "Enabled for instant app unlock" else "Use fingerprint instead of passcode",
+                                title = "Unlock with $bioDisplayName",
+                                subtitle = BiometricAuthHelper.getBiometricSettingsSubtitle(context, AppLockManager.isBiometricEnabled),
                                 checked = AppLockManager.isBiometricEnabled,
                                 accentColor = SystemBlue,
                                 onCheckedChange = { isChecked ->
@@ -366,12 +444,12 @@ fun SettingsScreen(
                                                 if (activity != null) {
                                                     BiometricAuthHelper.promptBiometric(
                                                         activity = activity,
-                                                        title = "Set Up Fingerprint",
-                                                        subtitle = "Scan your fingerprint to enable biometric unlock",
+                                                        title = "Set Up $bioDisplayName",
+                                                        subtitle = BiometricAuthHelper.getBiometricSetupSubtitle(context),
                                                         negativeButtonText = "Cancel",
                                                         onSuccess = {
                                                             AppLockManager.setBiometricAuth(true)
-                                                            Toast.makeText(context, "Fingerprint unlock enabled", Toast.LENGTH_SHORT).show()
+                                                            Toast.makeText(context, "$bioDisplayName unlock enabled", Toast.LENGTH_SHORT).show()
                                                         },
                                                         onError = { err ->
                                                             Toast.makeText(context, "Setup canceled: $err", Toast.LENGTH_SHORT).show()
@@ -385,15 +463,15 @@ fun SettingsScreen(
                                                 showEnrollBiometricDialog = true
                                             }
                                             BiometricAvailability.NO_HARDWARE -> {
-                                                Toast.makeText(context, "No fingerprint hardware found on this device", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "No biometric hardware found on this device", Toast.LENGTH_SHORT).show()
                                             }
                                             BiometricAvailability.HW_UNAVAILABLE -> {
-                                                Toast.makeText(context, "Fingerprint sensor is currently unavailable", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Biometric sensor is currently unavailable", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     } else {
                                         AppLockManager.setBiometricAuth(false)
-                                        Toast.makeText(context, "Fingerprint unlock disabled", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "$bioDisplayName unlock disabled", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 showDivider = true
@@ -463,6 +541,14 @@ fun SettingsScreen(
                             onClick = { onOpenProfile() },
                             showDivider = true
                         )
+                        SettingsActionRow(
+                            icon = Icons.Outlined.LockReset,
+                            iconTint = SystemBlue,
+                            title = "Change Account Password",
+                            badgeText = "2FA Gate",
+                            onClick = { showChangePasswordSheet = true },
+                            showDivider = true
+                        )
                         SettingsDestructiveRow(
                             icon = Icons.Outlined.Logout,
                             title = "Log Out of TaskFlow",
@@ -486,6 +572,27 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    // Modal Sheet: Time Zone & Region Picker
+    if (showTimezonePickerSheet) {
+        TimezonePickerBottomSheet(
+            onDismiss = { showTimezonePickerSheet = false },
+            onLocationSelected = { loc ->
+                Toast.makeText(context, "Location set to ${loc.cityName}, ${loc.countryName}", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    // Modal Sheet: Change Password Security Sheet
+    if (showChangePasswordSheet) {
+        com.example.todo_list.ui.screens.profile.ChangePasswordSecuritySheet(
+            onDismiss = { showChangePasswordSheet = false },
+            onPasswordChanged = {
+                showChangePasswordSheet = false
+                Toast.makeText(context, "Account password updated securely! 🛡️", Toast.LENGTH_SHORT).show()
+            }
+        )
     }
 
     // Modal Sheet 1: Edit Profile Sheet
@@ -649,10 +756,19 @@ fun SettingsScreen(
                     color = SystemLabelPrimary
                 )
 
-                listOf("08:00 AM", "09:00 AM", "10:00 AM", "02:00 PM", "06:00 PM").forEach { timeOption ->
+                val is24H = TimePreferencesManager.is24HourFormat
+                val dueTimeOptions = if (is24H) {
+                    listOf("08:00", "09:00", "10:00", "14:00", "18:00")
+                } else {
+                    listOf("08:00 AM", "09:00 AM", "10:00 AM", "02:00 PM", "06:00 PM")
+                }
+                val formattedCurrentDueTime = TimeFormatHelper.formatTimeForDisplay(defaultDueTime, is24H)
+
+                dueTimeOptions.forEach { timeOption ->
+                    val isSelected = formattedCurrentDueTime == timeOption
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (defaultDueTime == timeOption) SystemBlueLight else SystemGroupedBackground,
+                        color = if (isSelected) SystemBlueLight else SystemGroupedBackground,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
@@ -671,9 +787,9 @@ fun SettingsScreen(
                                 text = timeOption,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = if (defaultDueTime == timeOption) SystemBlue else SystemLabelPrimary
+                                color = if (isSelected) SystemBlue else SystemLabelPrimary
                             )
-                            if (defaultDueTime == timeOption) {
+                            if (isSelected) {
                                 Icon(
                                     imageVector = Icons.Outlined.Check,
                                     contentDescription = "Selected",
@@ -1006,13 +1122,13 @@ fun SettingsScreen(
         )
     }
 
-    // Dialog: Prompt to enroll fingerprint in device settings
+    // Dialog: Prompt to enroll biometric in device settings
     if (showEnrollBiometricDialog) {
         AlertDialog(
             onDismissRequest = { showEnrollBiometricDialog = false },
             title = {
                 Text(
-                    text = "Enroll Fingerprint",
+                    text = BiometricAuthHelper.getBiometricEnrollmentTitle(context),
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
                     color = SystemLabelPrimary
@@ -1020,7 +1136,7 @@ fun SettingsScreen(
             },
             text = {
                 Text(
-                    text = "No fingerprint is currently registered on this device. Would you like to open device settings and add a fingerprint?",
+                    text = BiometricAuthHelper.getBiometricEnrollmentMessage(context),
                     fontSize = 14.sp,
                     color = SystemLabelSecondary
                 )
@@ -1796,4 +1912,67 @@ fun ManageCategoriesBottomSheet(
         }
     }
 }
+
+@Composable
+fun TimePreviewWidgetRow(
+    location: WorldLocation,
+    is24Hour: Boolean
+) {
+    var currentTimeStr by remember(location.timeZoneId, is24Hour) {
+        mutableStateOf(TimeFormatHelper.getFormattedCurrentTime(location.timeZoneId, is24Hour))
+    }
+
+    LaunchedEffect(location.timeZoneId, is24Hour) {
+        while (true) {
+            currentTimeStr = TimeFormatHelper.getFormattedCurrentTime(location.timeZoneId, is24Hour)
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = SystemGroupedBackground,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "LIVE WORLD CLOCK",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SystemLabelSecondary,
+                    letterSpacing = 0.5.sp
+                )
+                Text(
+                    text = "${location.flagEmoji} ${location.cityName}",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SystemLabelPrimary
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = SystemBlueLight
+            ) {
+                Text(
+                    text = currentTimeStr,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SystemBlue,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
+    }
+}
+
 

@@ -3,12 +3,16 @@ package com.example.todo_list.ui.screens.profile
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -50,9 +54,10 @@ fun AchievementDetailSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 3D Apple-style Glowing Medal Emblem
             Box(
@@ -125,7 +130,7 @@ fun AchievementDetailSheet(
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
-                            text = "${badge.tier.title} Medal",
+                            text = "${badge.tier.title} Medal • +${badge.xpReward} XP Bounty",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = tierColor
@@ -134,56 +139,7 @@ fun AchievementDetailSheet(
                 }
             }
 
-            // Description Box
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = SystemGroupedBackground,
-                border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "REQUIREMENTS",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SystemLabelSecondary,
-                        letterSpacing = 0.5.sp
-                    )
-
-                    Text(
-                        text = badge.description,
-                        fontSize = 15.sp,
-                        color = SystemLabelPrimary,
-                        lineHeight = 22.sp
-                    )
-
-                    HorizontalDivider(color = SystemDivider, thickness = 0.5.dp)
-
-                    // Reward Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "XP Bounty",
-                            fontSize = 14.sp,
-                            color = SystemLabelSecondary
-                        )
-                        Text(
-                            text = "+${badge.xpReward} XP",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SystemBlue
-                        )
-                    }
-                }
-            }
-
-            // Unlocked Status Card / Progress Section
+            // Distinct Status Card (Achieved vs In Progress)
             if (badge.isUnlocked) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
@@ -200,32 +156,30 @@ fun AchievementDetailSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = "Unlocked",
+                            contentDescription = "Achieved",
                             tint = SystemGreen,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                         Column {
                             Text(
-                                text = "Unlocked & Claimed",
+                                text = "🏆 Medal Achieved & Claimed",
                                 fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 color = SystemGreen
                             )
-                            if (badge.unlockedDate != null) {
-                                Text(
-                                    text = "Earned on ${badge.unlockedDate}",
-                                    fontSize = 13.sp,
-                                    color = SystemLabelSecondary
-                                )
-                            }
+                            Text(
+                                text = if (badge.unlockedDate != null) "Earned on ${badge.unlockedDate}" else "Completed in profile",
+                                fontSize = 13.sp,
+                                color = SystemLabelSecondary
+                            )
                         }
                     }
                 }
             } else {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = SystemGroupedBackground,
-                    border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+                    color = SystemOrange.copy(alpha = 0.08f),
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemOrange.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -246,20 +200,20 @@ fun AchievementDetailSheet(
                                 Icon(
                                     imageVector = Icons.Filled.Lock,
                                     contentDescription = "Locked",
-                                    tint = SystemGray,
+                                    tint = SystemOrange,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
-                                    text = "In Progress",
+                                    text = "🔒 In Progress • Locked",
                                     fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = SystemLabelSecondary
+                                    fontWeight = FontWeight.Bold,
+                                    color = SystemOrange
                                 )
                             }
                             Text(
                                 text = "${badge.currentProgress} / ${badge.maxProgress}",
                                 fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 color = SystemLabelPrimary
                             )
                         }
@@ -271,8 +225,91 @@ fun AchievementDetailSheet(
                                 .fillMaxWidth()
                                 .height(6.dp)
                                 .clip(CircleShape),
-                            color = SystemBlue,
+                            color = SystemOrange,
                             trackColor = SystemGray5
+                        )
+
+                        val remaining = badge.maxProgress - badge.currentProgress
+                        if (remaining > 0) {
+                            Text(
+                                text = "$remaining more required to achieve this medal",
+                                fontSize = 12.sp,
+                                color = SystemLabelSecondary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Explicit Requirements & Profile Instructions Box
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = SystemGroupedBackground,
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Criteria Section
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Checklist,
+                                contentDescription = null,
+                                tint = SystemBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "CRITERIA & INSTRUCTIONS",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SystemLabelSecondary,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+
+                        Text(
+                            text = badge.unlockRequirement,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = SystemLabelPrimary,
+                            lineHeight = 20.sp
+                        )
+                    }
+
+                    HorizontalDivider(color = SystemDivider, thickness = 0.5.dp)
+
+                    // Profile Action Tip
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Lightbulb,
+                                contentDescription = null,
+                                tint = AppleStudy,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "PROFILE ACTION TIP",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SystemLabelSecondary,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+
+                        Text(
+                            text = badge.profileActionHint,
+                            fontSize = 13.sp,
+                            color = SystemLabelSecondary,
+                            lineHeight = 18.sp
                         )
                     }
                 }

@@ -6,20 +6,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.todo_list.data.local.AppDatabase
+import com.example.todo_list.data.local.entity.UserEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import java.security.SecureRandom
 
 object AppLockManager {
     private const val PREFS_NAME = "taskflow_app_lock_prefs"
-    private const val KEY_LOCK_ENABLED = "key_lock_enabled"
-    private const val KEY_LOCK_TYPE = "key_lock_type"
-    private const val KEY_LOCK_HASH = "key_lock_hash"
-    private const val KEY_LOCK_SALT = "key_lock_salt"
-    private const val KEY_LOCK_TIMEOUT = "key_lock_timeout"
-    private const val KEY_BIOMETRIC_ENABLED = "key_biometric_enabled"
     private const val KEY_LAST_BACKGROUND_TIME = "key_last_bg_time"
 
     private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
 
     // Reactive Compose States
     var isLocked by mutableStateOf(false)
@@ -40,80 +40,143 @@ object AppLockManager {
     private var lastBackgroundTimestamp: Long = 0L
 
     fun initialize(context: Context) {
+        appContext = context.applicationContext
         if (prefs == null) {
             prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            reloadState()
-
-            if (isLockEnabled) {
-                val lastBg = prefs?.getLong(KEY_LAST_BACKGROUND_TIME, 0L) ?: 0L
-                if (lockTimeoutMs == 0L || lastBg == 0L) {
-                    isLocked = true
-                } else {
-                    val elapsed = System.currentTimeMillis() - lastBg
-                    if (elapsed >= lockTimeoutMs) {
-                        isLocked = true
-                    } else {
-                        isLocked = false
-                    }
-                }
-            }
+            lastBackgroundTimestamp = prefs?.getLong(KEY_LAST_BACKGROUND_TIME, 0L) ?: 0L
         }
     }
 
-    private fun reloadState() {
-        prefs?.let { p ->
-            isLockEnabled = p.getBoolean(KEY_LOCK_ENABLED, false)
-            isBiometricEnabled = p.getBoolean(KEY_BIOMETRIC_ENABLED, false)
-            val typeStr = p.getString(KEY_LOCK_TYPE, LockType.PIN_4.id)
-            currentLockType = LockType.fromId(typeStr)
-            lockTimeoutMs = p.getLong(KEY_LOCK_TIMEOUT, 0L)
-            lastBackgroundTimestamp = p.getLong(KEY_LAST_BACKGROUND_TIME, 0L)
+    /**
+     * Loads lock settings for the active user account from SQLite.
+     */
+    fun loadUserLock(user: UserEntity?) {
+        if (user == null) {
+            isLockEnabled = false
+            isBiometricEnabled = false
+            isLocked = false
+            currentLockType = LockType.PIN_4
+            lockTimeoutMs = 0L
+            return
         }
+
+        isLockEnabled = user.isLockEnabled
+        isBiometricEnabled = user.isBiometricEnabled
+        currentLockType = LockType.fromId(user.lockType)
+        lockTimeoutMs = user.lockTimeoutMs
+
+        if (isLockEnabled) {
+            val lastBg = prefs?.getLong(KEY_LAST_BACKGROUND_TIME, 0L) ?: 0L
+            if (lockTimeoutMs == 0L || lastBg == 0L) {
+                isLocked = true
+            } else {
+                val elapsed = System.currentTimeMillis() - lastBg
+                isLocked = elapsed >= lockTimeoutMs
+            }
+        } else {
+            isLocked = false
+        }
+    }
+
+    fun resetLockOnLogout() {
+        isLocked = false
+        isLockEnabled = false
+        isBiometricEnabled = false
+        lastBackgroundTimestamp = 0L
+        prefs?.edit()?.putLong(KEY_LAST_BACKGROUND_TIME, 0L)?.apply()
     }
 
     fun setLock(type: LockType, secret: String) {
         val salt = generateSalt()
         val hash = hashSecret(secret, salt)
 
-        prefs?.edit()
-            ?.putBoolean(KEY_LOCK_ENABLED, true)
-            ?.putString(KEY_LOCK_TYPE, type.id)
-            ?.putString(KEY_LOCK_HASH, hash)
-            ?.putString(KEY_LOCK_SALT, salt)
-            ?.apply()
-
         isLockEnabled = true
         currentLockType = type
         isLocked = false
         lastBackgroundTimestamp = 0L
         prefs?.edit()?.putLong(KEY_LAST_BACKGROUND_TIME, 0L)?.apply()
+
+        val userId = AuthManager.currentUserId
+        if (userId != null && appContext != null) {
+            val updatedUser = AuthManager.currentUser?.copy(
+                lockType = type.id,
+                lockHash = hash,
+                lockSalt = salt,
+                isLockEnabled = true
+            )
+            AuthManager.currentUser = updatedUser
+
+            CoroutineScope(Dispatchers.IO).launch {
+                val dao = AppDatabase.getInstance(appContext!!).userDao()
+                dao.updateUserLock(
+                    userId = userId,
+                    lockType = type.id,
+                    lockHash = hash,
+                    lockSalt = salt,
+                    isLockEnabled = true,
+                    isBiometricEnabled = isBiometricEnabled,
+                    lockTimeoutMs = lockTimeoutMs
+                )
+            }
+        }
     }
 
     fun verifySecret(inputSecret: String): Boolean {
-        val storedHash = prefs?.getString(KEY_LOCK_HASH, null) ?: return false
-        val storedSalt = prefs?.getString(KEY_LOCK_SALT, null) ?: return false
+        val user = AuthManager.currentUser
+        val storedHash = user?.lockHash ?: return false
+        val storedSalt = user.lockSalt ?: return false
         val inputHash = hashSecret(inputSecret, storedSalt)
         return inputHash == storedHash
     }
 
     fun setBiometricAuth(enabled: Boolean) {
         isBiometricEnabled = enabled
-        prefs?.edit()?.putBoolean(KEY_BIOMETRIC_ENABLED, enabled)?.apply()
+        val user = AuthManager.currentUser
+        if (user != null && appContext != null) {
+            AuthManager.currentUser = user.copy(isBiometricEnabled = enabled)
+            CoroutineScope(Dispatchers.IO).launch {
+                val dao = AppDatabase.getInstance(appContext!!).userDao()
+                dao.updateUserLock(
+                    userId = user.id,
+                    lockType = currentLockType.id,
+                    lockHash = user.lockHash,
+                    lockSalt = user.lockSalt,
+                    isLockEnabled = isLockEnabled,
+                    isBiometricEnabled = enabled,
+                    lockTimeoutMs = lockTimeoutMs
+                )
+            }
+        }
     }
 
     fun disableLock() {
-        prefs?.edit()
-            ?.putBoolean(KEY_LOCK_ENABLED, false)
-            ?.putBoolean(KEY_BIOMETRIC_ENABLED, false)
-            ?.remove(KEY_LOCK_HASH)
-            ?.remove(KEY_LOCK_SALT)
-            ?.putLong(KEY_LAST_BACKGROUND_TIME, 0L)
-            ?.apply()
-
         isLockEnabled = false
         isBiometricEnabled = false
         isLocked = false
         lastBackgroundTimestamp = 0L
+        prefs?.edit()?.putLong(KEY_LAST_BACKGROUND_TIME, 0L)?.apply()
+
+        val user = AuthManager.currentUser
+        if (user != null && appContext != null) {
+            AuthManager.currentUser = user.copy(
+                isLockEnabled = false,
+                isBiometricEnabled = false,
+                lockHash = null,
+                lockSalt = null
+            )
+            CoroutineScope(Dispatchers.IO).launch {
+                val dao = AppDatabase.getInstance(appContext!!).userDao()
+                dao.updateUserLock(
+                    userId = user.id,
+                    lockType = currentLockType.id,
+                    lockHash = null,
+                    lockSalt = null,
+                    isLockEnabled = false,
+                    isBiometricEnabled = false,
+                    lockTimeoutMs = lockTimeoutMs
+                )
+            }
+        }
     }
 
     fun unlock() {
@@ -130,7 +193,22 @@ object AppLockManager {
 
     fun setTimeout(timeoutMs: Long) {
         lockTimeoutMs = timeoutMs
-        prefs?.edit()?.putLong(KEY_LOCK_TIMEOUT, timeoutMs)?.apply()
+        val user = AuthManager.currentUser
+        if (user != null && appContext != null) {
+            AuthManager.currentUser = user.copy(lockTimeoutMs = timeoutMs)
+            CoroutineScope(Dispatchers.IO).launch {
+                val dao = AppDatabase.getInstance(appContext!!).userDao()
+                dao.updateUserLock(
+                    userId = user.id,
+                    lockType = currentLockType.id,
+                    lockHash = user.lockHash,
+                    lockSalt = user.lockSalt,
+                    isLockEnabled = isLockEnabled,
+                    isBiometricEnabled = isBiometricEnabled,
+                    lockTimeoutMs = timeoutMs
+                )
+            }
+        }
     }
 
     fun onAppBackgrounded() {
@@ -156,7 +234,6 @@ object AppLockManager {
             if (elapsed >= lockTimeoutMs) {
                 isLocked = true
             }
-            // Reset background timestamp since app is actively in foreground now
             lastBackgroundTimestamp = 0L
             prefs?.edit()?.putLong(KEY_LAST_BACKGROUND_TIME, 0L)?.apply()
         }

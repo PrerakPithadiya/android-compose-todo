@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * Data Access Object for Tasks.
+ * Supports multi-user task queries and management.
  */
 @Dao
 interface TaskDao {
@@ -18,8 +19,11 @@ interface TaskDao {
     @Query("SELECT * FROM tasks ORDER BY createdAt ASC")
     fun getAllTasksFlow(): Flow<List<TaskEntity>>
 
-    @Query("SELECT * FROM tasks WHERE category = :category ORDER BY createdAt ASC")
-    fun getTasksByCategoryFlow(category: String): Flow<List<TaskEntity>>
+    @Query("SELECT * FROM tasks WHERE userId = :userId ORDER BY createdAt ASC")
+    fun getTasksForUserFlow(userId: String): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks WHERE userId = :userId AND category = :category ORDER BY createdAt ASC")
+    fun getTasksForUserByCategoryFlow(userId: String, category: String): Flow<List<TaskEntity>>
 
     @Query("SELECT * FROM tasks WHERE id = :taskId LIMIT 1")
     suspend fun getTaskById(taskId: String): TaskEntity?
@@ -42,15 +46,27 @@ interface TaskDao {
     @Query("DELETE FROM tasks WHERE isCompleted = 1")
     suspend fun deleteCompletedTasks()
 
+    @Query("DELETE FROM tasks WHERE userId = :userId AND isCompleted = 1")
+    suspend fun deleteCompletedTasksForUser(userId: String)
+
     @Query("DELETE FROM tasks")
     suspend fun deleteAllTasks()
 
+    @Query("DELETE FROM tasks WHERE userId = :userId")
+    suspend fun deleteAllTasksForUser(userId: String)
+
     @Query("UPDATE tasks SET category = :targetCategory WHERE category = :oldCategory")
     suspend fun migrateCategory(oldCategory: String, targetCategory: String)
+
+    @Query("UPDATE tasks SET category = :targetCategory WHERE userId = :userId AND category = :oldCategory")
+    suspend fun migrateCategoryForUser(userId: String, oldCategory: String, targetCategory: String)
 
     @Query("UPDATE tasks SET isCompleted = :isCompleted WHERE id = :taskId")
     suspend fun updateTaskCompletion(taskId: String, isCompleted: Boolean)
 
     @Query("SELECT COUNT(*) FROM tasks")
     suspend fun getTaskCount(): Int
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE userId = :userId")
+    suspend fun getTaskCountForUser(userId: String): Int
 }

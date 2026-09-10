@@ -37,6 +37,9 @@ class MainActivity : FragmentActivity() {
         // Initialize persistent User Profile state
         com.example.todo_list.manager.UserProfileManager.initialize(this)
 
+        // Initialize persistent Time Zone & Regional formatting state
+        com.example.todo_list.manager.TimePreferencesManager.initialize(this)
+
         // Initialize persistent Haptics state
         com.example.todo_list.utils.HapticManager.initialize(this)
 
@@ -54,6 +57,7 @@ class MainActivity : FragmentActivity() {
                 }
                 Lifecycle.Event.ON_RESUME -> {
                     com.example.todo_list.utils.HighRefreshRateManager.onResume(this)
+                    com.example.todo_list.manager.TimePreferencesManager.detectUserTimezone(this, forceNotify = false)
                 }
                 else -> Unit
             }

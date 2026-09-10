@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -64,6 +65,10 @@ import com.example.todo_list.manager.UserProfileManager
 import com.example.todo_list.notification.TaskNotificationScheduler
 import com.example.todo_list.data.repository.TaskRepository
 import com.example.todo_list.ui.components.CreateCategoryBottomSheet
+import com.example.todo_list.ui.components.IosTimezoneNotificationBanner
+import com.example.todo_list.ui.components.TimezonePickerBottomSheet
+import com.example.todo_list.manager.TimePreferencesManager
+import com.example.todo_list.utils.TimeFormatHelper
 import com.example.todo_list.ui.screens.profile.ProfileScreen
 import com.example.todo_list.utils.HapticManager
 
@@ -105,7 +110,14 @@ fun HomeScreen(
 
     val coroutineScope = rememberCoroutineScope()
     val taskRepository = remember { TaskRepository.getInstance(context) }
-    val taskList by taskRepository.tasks.collectAsState(initial = emptyList())
+    val currentUserId = com.example.todo_list.security.AuthManager.currentUserId ?: ""
+    val taskList by remember(currentUserId) {
+        if (currentUserId.isNotBlank()) {
+            taskRepository.getTasksForUser(currentUserId)
+        } else {
+            taskRepository.tasks
+        }
+    }.collectAsState(initial = emptyList())
     val categoriesList by taskRepository.categories.collectAsState(initial = TaskListCategory.DEFAULT_CATEGORIES)
 
     var selectedTab by remember { mutableStateOf(0) }
@@ -117,6 +129,7 @@ fun HomeScreen(
     var editingTask by remember { mutableStateOf<TaskItem?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var prefilledTaskCategory by remember { mutableStateOf<String?>(null) }
+    var showTimezonePickerSheet by remember { mutableStateOf(false) }
 
     val onToggleCompleteHelper: (TaskItem) -> Unit = remember(context, taskRepository, coroutineScope) {
         { toggledTask: TaskItem ->
@@ -233,7 +246,8 @@ fun HomeScreen(
         },
         containerColor = SystemGroupedBackground
     ) { innerPadding ->
-        when (selectedTab) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            when (selectedTab) {
             0 -> {
                 LazyColumn(
                     state = listState,
@@ -329,7 +343,7 @@ fun HomeScreen(
                     coroutineScope.launch { taskRepository.deleteCategory(categoryToDelete) }
                 },
                 onDeleteCategoryWithMigration = { categoryToDelete, targetCategoryName ->
-                    coroutineScope.launch { taskRepository.deleteCategoryWithMigration(categoryToDelete, targetCategoryName) }
+                    coroutineScope.launch { taskRepository.deleteCategoryWithMigration(categoryToDelete, targetCategoryName, currentUserId) }
                 },
                 onOpenAddTaskSheet = { prefilledCategory ->
                     prefilledTaskCategory = prefilledCategory
@@ -343,25 +357,42 @@ fun HomeScreen(
                     coroutineScope.launch { taskRepository.insertCategory(newCategory) }
                 },
                 onDeleteCategoryWithMigration = { categoryToDelete, targetCategoryName ->
-                    coroutineScope.launch { taskRepository.deleteCategoryWithMigration(categoryToDelete, targetCategoryName) }
+                    coroutineScope.launch { taskRepository.deleteCategoryWithMigration(categoryToDelete, targetCategoryName, currentUserId) }
                 },
                 themeMode = themeMode,
                 onThemeModeChange = onThemeModeChange,
                 accentColor = accentColor,
                 onAccentColorChange = onAccentColorChange,
                 onClearCompletedTasks = {
-                    coroutineScope.launch { taskRepository.clearCompletedTasks() }
+                    coroutineScope.launch { taskRepository.clearCompletedTasks(currentUserId) }
                 },
                 onResetAllData = {
-                    coroutineScope.launch { taskRepository.clearAllTasks() }
+                    coroutineScope.launch { taskRepository.clearAllTasks(currentUserId) }
                 },
                 onOpenProfile = {
                     showProfileScreen = true
                 }
             )
         }
+
+        // Authentic Apple iOS Dynamic Timezone Notification Banner
+        IosTimezoneNotificationBanner(
+            visible = TimePreferencesManager.showDetectionBanner,
+            location = TimePreferencesManager.detectedLocation,
+            onCustomizeClick = {
+                TimePreferencesManager.dismissBanner()
+                showTimezonePickerSheet = true
+            },
+            onDismiss = {
+                TimePreferencesManager.dismissBanner()
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = innerPadding.calculateTopPadding())
+        )
     }
-    }
+}
+}
 
 
     // Modern Create Task Bottom Sheet
@@ -423,6 +454,13 @@ fun HomeScreen(
                 prefilledTaskCategory = null
                 showAddTaskSheet = true
             }
+        )
+    }
+
+    // Timezone & World Cities Picker Sheet
+    if (showTimezonePickerSheet) {
+        TimezonePickerBottomSheet(
+            onDismiss = { showTimezonePickerSheet = false }
         )
     }
 }
@@ -725,7 +763,7 @@ fun TaskCardItem(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Text(
-                        text = task.time,
+                        text = TimeFormatHelper.formatTimeForDisplay(task.time, TimePreferencesManager.is24HourFormat),
                         fontSize = 14.sp,
                         color = if (task.isCompleted) SystemLabelTertiary else SystemLabelSecondary
                     )
@@ -853,6 +891,7 @@ fun AllTasksBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.88f)
+                .imePadding()
                 .padding(horizontal = 20.dp)
         ) {
             Row(
@@ -1008,14 +1047,18 @@ fun AllTasksBottomSheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalogClockPickerDialog(
+    initialTime: String = if (TimePreferencesManager.is24HourFormat) "09:00" else "09:00 AM",
+    is24Hour: Boolean = TimePreferencesManager.is24HourFormat,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
-    val calendar = Calendar.getInstance()
+    val (parsedHour, parsedMinute) = remember(initialTime) {
+        TimeFormatHelper.parseHourMinute(initialTime)
+    }
     val timePickerState = rememberTimePickerState(
-        initialHour = calendar.get(Calendar.HOUR_OF_DAY),
-        initialMinute = calendar.get(Calendar.MINUTE),
-        is24Hour = false
+        initialHour = parsedHour,
+        initialMinute = parsedMinute,
+        is24Hour = is24Hour
     )
 
     AlertDialog(
@@ -1025,14 +1068,7 @@ fun AnalogClockPickerDialog(
                 onClick = {
                     val hour = timePickerState.hour
                     val minute = timePickerState.minute
-                    val isPm = hour >= 12
-                    val displayHour = when {
-                        hour == 0 -> 12
-                        hour > 12 -> hour - 12
-                        else -> hour
-                    }
-                    val amPm = if (isPm) "PM" else "AM"
-                    val formattedTime = String.format("%02d:%02d %s", displayHour, minute, amPm)
+                    val formattedTime = TimeFormatHelper.formatHourMinute(hour, minute, is24Hour)
                     onConfirm(formattedTime)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
@@ -1142,18 +1178,19 @@ fun CreateTaskBottomSheet(
     val context = LocalContext.current
     val currentEpochDay = remember { System.currentTimeMillis() / (1000 * 60 * 60 * 24) }
 
+    val is24Hour = TimePreferencesManager.is24HourFormat
     var taskTitle by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(initialCategory) }
     var selectedDate by remember { mutableStateOf("Today") }
     var selectedEpochDay by remember { mutableStateOf(currentEpochDay) }
-    var selectedTime by remember { mutableStateOf("05:00 PM") }
+    var selectedTime by remember(is24Hour) { mutableStateOf(if (is24Hour) "17:00" else "05:00 PM") }
     var titleError by remember { mutableStateOf(false) }
 
     var showAnalogClock by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showCreateCategorySheet by remember { mutableStateOf(false) }
 
-    val quickTimes = listOf("09:00 AM", "11:30 AM", "02:00 PM", "05:00 PM", "08:00 PM")
+    val quickTimes = remember(is24Hour) { TimeFormatHelper.getQuickTimes(is24Hour) }
 
     if (showCreateCategorySheet) {
         CreateCategoryBottomSheet(
@@ -1168,6 +1205,8 @@ fun CreateTaskBottomSheet(
 
     if (showAnalogClock) {
         AnalogClockPickerDialog(
+            initialTime = selectedTime,
+            is24Hour = is24Hour,
             onDismiss = { showAnalogClock = false },
             onConfirm = { pickedTime ->
                 selectedTime = pickedTime
@@ -1198,6 +1237,7 @@ fun CreateTaskBottomSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .imePadding()
+                .verticalScroll(rememberScrollState())
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
@@ -1567,18 +1607,21 @@ fun EditTaskBottomSheet(
     val context = LocalContext.current
     val currentEpochDay = remember { System.currentTimeMillis() / (1000 * 60 * 60 * 24) }
 
+    val is24Hour = TimePreferencesManager.is24HourFormat
     var taskTitle by remember { mutableStateOf(task.title) }
     var selectedCategory by remember { mutableStateOf(task.category) }
     var selectedDate by remember { mutableStateOf(task.date) }
     var selectedEpochDay by remember { mutableStateOf(task.epochDay.takeIf { it > 0 } ?: currentEpochDay) }
-    var selectedTime by remember { mutableStateOf(task.time) }
+    var selectedTime by remember(task.time, is24Hour) {
+        mutableStateOf(TimeFormatHelper.formatTimeForDisplay(task.time, is24Hour))
+    }
     var titleError by remember { mutableStateOf(false) }
 
     var showAnalogClock by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showCreateCategorySheet by remember { mutableStateOf(false) }
 
-    val quickTimes = listOf("09:00 AM", "11:30 AM", "02:00 PM", "05:00 PM", "08:00 PM")
+    val quickTimes = remember(is24Hour) { TimeFormatHelper.getQuickTimes(is24Hour) }
 
     if (showCreateCategorySheet) {
         CreateCategoryBottomSheet(
@@ -1593,6 +1636,8 @@ fun EditTaskBottomSheet(
 
     if (showAnalogClock) {
         AnalogClockPickerDialog(
+            initialTime = selectedTime,
+            is24Hour = is24Hour,
             onDismiss = { showAnalogClock = false },
             onConfirm = { pickedTime ->
                 selectedTime = pickedTime
@@ -1623,6 +1668,7 @@ fun EditTaskBottomSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .imePadding()
+                .verticalScroll(rememberScrollState())
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {

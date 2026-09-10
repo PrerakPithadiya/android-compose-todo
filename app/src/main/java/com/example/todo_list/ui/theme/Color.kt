@@ -214,6 +214,8 @@ val SystemRed: Color
 val SystemGreen: Color
     @Composable @ReadOnlyComposable get() = LocalTaskFlowColors.current.systemGreen
 
+val SystemOrange = Color(0xFFFF9500)
+
 // Category Colors (Apple HIG Palette)
 val AppleWork = Color(0xFF007AFF)              // Work - System Blue
 val ApplePersonal = Color(0xFFAF52DE)          // Personal - System Purple

@@ -9,7 +9,7 @@ TaskFlow is a modern, high-performance task management application for Android, 
 ### 1. 🔐 Account Auto-Detection, Phone OTP Registration & Login
 * **Automatic Account Detection**: Automatically detects whether an account exists on launch; dynamically routes first-time users to the **Phone Registration** workflow, logged-out users to the **Login Screen**, and authenticated users directly to their workspace.
 * **6-Digit Phone OTP Verification**: Clean phone number input with international country code selection, automated 6-digit verification code dispatch, and an Apple-styled **Interactive Push Notification Banner** with 1-tap autofill.
-* **Account Setup & Password Hashing**: Streamlined profile initialization (Full Name, Username `@handle`, and Password with live strength meter) securely hashed using SHA-256 with cryptographically secure random salts.
+* **Account Setup & Password Security**: Streamlined profile initialization (Full Name, Username `@handle`, and 4-rule strict password validation checklist: 8+ chars, 1+ number, uppercase/symbol, match confirmation) with a 4-segment live strength meter and SHA-256 random salting.
 * **Login & Recovery**: Username/Phone and Password authentication with visibility toggles, biometric instant login shortcut, "Forgot Password" SMS OTP recovery flow, and intuitive Log Out controls in Settings & Profile.
 
 ### 2. 🎨 Apple (iOS HIG) Design System
@@ -22,8 +22,11 @@ TaskFlow is a modern, high-performance task management application for Android, 
 * **Smart Sorting**: Automatically groups and ranks tasks chronologically by time (AM/PM parsed values) with completed tasks grouped cleanly at the bottom.
 * **Filters**: Quick filtering options by category list.
 
-### 4. 🔒 Passcode, Pattern & Biometric Security
-* **App Lock Options**: Configure Passcode (using custom iOS-style numeric keypads), Pattern Lock (via custom drawn pattern canvases), or Biometrics (fingerprint/face unlock).
+### 4. 🔒 Passcode, Pattern & Biometric Security (Face ID & Fingerprint)
+* **Hardware Modality Detection**: Automatically inspects device hardware (`PackageManager.FEATURE_FACE`, `PackageManager.FEATURE_FINGERPRINT`) and `BiometricManager` capability to dynamically adapt the security experience.
+* **Apple Face ID Integration**: Features an authentic Apple iOS Face ID vector icon (`IosFaceIdIcon`), adaptive keypad buttons, contextual subtitles ("Look at your device to continue"), and dynamic status badges conforming to Apple Human Interface Guidelines.
+* **App Lock Options**: Configure Passcode (4-digit & 6-digit using custom iOS-style numeric keypads), Pattern Lock (via custom drawn pattern canvases), Alphanumeric Password, or Biometrics (Face ID / Fingerprint unlock).
+* **Multi-Modal Biometric Support**: Seamless support for Class 3 and Class 2 biometrics (Google Pixel 4/7/8/9, Samsung Galaxy One UI Face Recognition, OnePlus, Xiaomi) with zero battery drain, secure TEE authentication, and graceful passcode fallbacks.
 * **Smart Background Locking**: Monitors lifecycle changes using `FragmentActivity` to automatically prompt auth whenever the app is backgrounded or resumed.
 
 ### 5. 🔔 Smart Local Reminders
@@ -36,20 +39,23 @@ TaskFlow is a modern, high-performance task management application for Android, 
 * **Strict Confirmation Workflow**: Staging architecture ensuring photos are only applied and saved to private app storage once explicitly finalized and confirmed by the user.
 * **Hero Identity Card**: High-resolution avatar with live photo gallery picker / 8 curated Memoji presets, verified Pro badge, editable Bio, and interactive Focus Status selector (`🎯 Deep Work`, `⚡ In the Flow`, `🚀 Shipping Code`, `☕ Coffee Break`, `🏖️ On Holiday`).
 * **Productivity Level & XP System**: Real-time calculated Level & XP progress bar based on daily task completions, early bird achievements, and streaks.
-* **Apple Watch / Fitness Achievement Medals**: 8 collectible 3D glowing medals (`🌟 First Step`, `🔥 Week on Fire`, `⚡ Hyper Focus`, `🌅 Early Bird`, `📚 Master Organizer`, `🛡️ Fort Knox`, `🎯 Perfectionist`, `👑 Century Club`) with interactive inspection sheets.
+* **Apple Watch / Fitness Achievement Medals**: 8 collectible 3D glowing medals (`🌟 First Step`, `🔥 Week on Fire`, `⚡ Hyper Focus`, `🌅 Early Bird`, `📚 Master Organizer`, `🛡️ Fort Knox`, `🎯 Perfectionist`, `👑 Century Club`) with detailed unlock criteria, actionable profile tips, interactive inspection sheets, and quick filter tabs ("All", "Achieved 🏆", "In Progress 🔒").
 * **Productivity Bento Analytics**: 4-cell Bento grid showcasing Total Completed Tasks, Active Streak flame counter, Focus Time saved, On-Time Efficiency %, and 7-day consistency bar visualizer.
-* **TaskFlow Pro & iCloud Sync Hub**: Apple Card-styled metallic card with real-time iCloud sync status, manual "Sync Now" trigger with rotating animation, and Pro perks overview.
+* **Multi-Layer Security Sheet**: 4-stage biometric + OTP verified password change flow and inline username editor.
 * **Digital Productivity Pass & QR Sharing**: Apple Wallet-styled shareable digital pass with QR code and Android System Share Sheet integration.
 
 ### 7. 🗂️ Custom Lists & Categories
 * **CRUD Categories**: Create, customize, and delete lists with specific colors (Teal, Indigo, Purple, Orange, Red, Pink, etc.) and custom symbols.
 * **Safe Deletions**: Prompt-based migration system that safely reassigns tasks to other lists when a list is deleted.
 
-### 8. 💾 Android Jetpack Room (SQLite) Database Architecture
-* **Single Source of Truth**: Full local-first persistence for tasks, categories, and list structures using official Android Jetpack Room 2.8 with Google KSP.
+### 8. 💾 Multi-User Android Jetpack Room (SQLite) Database Architecture
+* **Dedicated `users` Table**: All registered users are stored in SQLite with full credentials (SHA-256 salted hashes), unique `@usernames`, phone numbers, profile information, and account creation timestamps.
+* **Per-User Screen Locks in SQLite**: Each user's screen lock type (PIN, Pattern, Alphanumeric), salted passcode hash, biometric preferences, and lock timeout settings are stored directly in their SQLite user row.
+* **Per-User Task Isolation**: Tasks are associated with individual user IDs (`userId` foreign reference). When User A logs in, they see User A's tasks; when User B logs in, they see User B's tasks.
+* **Single Source of Truth**: Full local-first persistence for users, tasks, and categories using official Android Jetpack Room 2.8 with Google KSP.
 * **Reactive Kotlin Flow Streaming**: UI automatically reacts and re-renders instantaneously upon any database insertion, update, or deletion with zero polling or latency.
 * **Atomic Category Migration**: Category deletions with task migrations execute inside atomic SQLite transactions (`withTransaction`), preventing data loss or orphaned tasks.
-* **Pre-population & Seeding**: Automatic database initialization callback seeds standard default categories (`Work`, `Personal`, `Health`, `Study`) and starter items on first install.
+* **Pre-population & Seeding**: Automatic database initialization callback seeds standard default categories (`Work`, `Personal`, `Health`, `Study`) and starter items for newly registered users on first launch.
 * **Offline-First Resilience**: All operations work without internet connection, ensuring 100% data integrity and instant startup performance.
 
 ### ⚡ 9. Performance & Tactile Enhancements

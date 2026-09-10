@@ -14,7 +14,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MarkEmailRead
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Sms
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,16 +55,39 @@ fun OtpVerificationScreen(
     var errorMessage by remember { mutableStateOf("") }
     var isVerifying by remember { mutableStateOf(false) }
 
-    // 30-Second Countdown Timer for Resend OTP
+    // Visible Countdown Timer for OTP Validity (60 Seconds)
+    var otpTimerKey by remember { mutableIntStateOf(0) }
+    var otpRemainingSeconds by remember { mutableIntStateOf(AuthManager.OTP_VALIDITY_SECONDS) }
+    var isOtpExpired by remember { mutableStateOf(false) }
+
+    // 30-Second Cooldown Timer for Resend OTP
     var resendCountdown by remember { mutableIntStateOf(30) }
     var canResend by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        while (resendCountdown > 0) {
+    LaunchedEffect(otpTimerKey) {
+        otpRemainingSeconds = AuthManager.OTP_VALIDITY_SECONDS
+        isOtpExpired = false
+        resendCountdown = 30
+        canResend = false
+        while (otpRemainingSeconds > 0) {
             delay(1000)
-            resendCountdown--
+            otpRemainingSeconds--
+            if (resendCountdown > 0) {
+                resendCountdown--
+            } else {
+                canResend = true
+            }
         }
+        isOtpExpired = true
         canResend = true
+        AuthManager.expireCurrentOtp()
+        HapticManager.performWarning(context)
+    }
+
+    val formattedCountdown = remember(otpRemainingSeconds) {
+        val minutes = otpRemainingSeconds / 60
+        val seconds = otpRemainingSeconds % 60
+        String.format("%02d:%02d", minutes, seconds)
     }
 
     val maskedPhone = remember(phoneNumber) {
@@ -77,7 +103,12 @@ fun OtpVerificationScreen(
     val verifyCodeAction = { codeToVerify: String ->
         if (codeToVerify.length == 6 && !isVerifying) {
             isVerifying = true
-            if (AuthManager.verifyOtp(codeToVerify)) {
+            if (isOtpExpired || AuthManager.isOtpExpired()) {
+                HapticManager.performError(context)
+                isError = true
+                errorMessage = "Verification code has expired. Please tap 'Resend Code'."
+                isVerifying = false
+            } else if (AuthManager.verifyOtp(codeToVerify)) {
                 HapticManager.performSuccess(context)
                 isError = false
                 isVerifying = false
@@ -88,7 +119,7 @@ fun OtpVerificationScreen(
                 errorMessage = "Invalid verification code. Please try again."
                 isVerifying = false
                 coroutineScope.launch {
-                    delay(1200)
+                    delay(1500)
                     isError = false
                 }
             }
@@ -101,6 +132,7 @@ fun OtpVerificationScreen(
             .background(SystemGroupedBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -184,14 +216,67 @@ fun OtpVerificationScreen(
             )
         }
 
-        // Center Input Section: 6 Digit Boxes + Error
+        // Center Input Section: Countdown Badge + 6 Digit Boxes + Error
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(vertical = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Visible Countdown Timer Badge (Apple HIG)
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = when {
+                    isOtpExpired -> SystemRed.copy(alpha = 0.10f)
+                    otpRemainingSeconds <= 10 -> SystemOrange.copy(alpha = 0.12f)
+                    else -> SystemBlue.copy(alpha = 0.08f)
+                },
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 0.8.dp,
+                    color = when {
+                        isOtpExpired -> SystemRed.copy(alpha = 0.3f)
+                        otpRemainingSeconds <= 10 -> SystemOrange.copy(alpha = 0.35f)
+                        else -> SystemBlue.copy(alpha = 0.2f)
+                    }
+                )
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                ) {
+                    Icon(
+                        imageVector = when {
+                            isOtpExpired -> Icons.Outlined.ErrorOutline
+                            otpRemainingSeconds <= 10 -> Icons.Outlined.HourglassBottom
+                            else -> Icons.Outlined.Timer
+                        },
+                        contentDescription = "Timer",
+                        tint = when {
+                            isOtpExpired -> SystemRed
+                            otpRemainingSeconds <= 10 -> SystemOrange
+                            else -> SystemBlue
+                        },
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        text = when {
+                            isOtpExpired -> "Code expired. Tap 'Resend Code' below"
+                            otpRemainingSeconds <= 10 -> "Expiring soon: $formattedCountdown"
+                            else -> "Code expires in $formattedCountdown"
+                        },
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = when {
+                            isOtpExpired -> SystemRed
+                            otpRemainingSeconds <= 10 -> SystemOrange
+                            else -> SystemBlue
+                        }
+                    )
+                }
+            }
+
             IosOtpInputView(
                 otpCode = enteredOtp,
                 onOtpChange = {
@@ -231,33 +316,21 @@ fun OtpVerificationScreen(
                     color = SystemLabelSecondary
                 )
 
-                if (canResend) {
+                val canResendNow = canResend || isOtpExpired
+                if (canResendNow) {
                     Text(
                         text = "Resend Code",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = SystemBlue,
                         modifier = Modifier.clickable {
-                            coroutineScope.launch {
-                                HapticManager.performSuccess(context)
-                                val (newOtp, deliveryResult) = AuthManager.sendRealSmsOtp(phoneNumber)
-                                onResendRequested(newOtp)
-                                resendCountdown = 30
-                                canResend = false
-                                when (deliveryResult) {
-                                    is com.example.todo_list.security.SmsDeliveryResult.Success -> {
-                                        Toast.makeText(context, "New SMS dispatched to $phoneNumber", Toast.LENGTH_SHORT).show()
-                                    }
-                                    is com.example.todo_list.security.SmsDeliveryResult.Failure -> {
-                                        Toast.makeText(context, "Fast2SMS: ${deliveryResult.errorMessage}", Toast.LENGTH_LONG).show()
-                                    }
-                                }
-                                while (resendCountdown > 0) {
-                                    delay(1000)
-                                    resendCountdown--
-                                }
-                                canResend = true
-                            }
+                            HapticManager.performSuccess(context)
+                            val newOtp = AuthManager.sendOtp(phoneNumber)
+                            onResendRequested(newOtp)
+                            enteredOtp = ""
+                            isError = false
+                            otpTimerKey++ // Resets countdown timer back to 60s
+                            Toast.makeText(context, "New verification code dispatched", Toast.LENGTH_SHORT).show()
                         }
                     )
                 } else {
