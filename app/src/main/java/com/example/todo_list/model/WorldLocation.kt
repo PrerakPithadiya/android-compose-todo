@@ -23,4 +23,16 @@ data class WorldLocation(
      * Searchable text blob containing city, country, abbreviation, and timezone ID.
      */
     val searchKeywords: String get() = "$cityName $countryName $countryCode $timeZoneAbbr $timeZoneName $utcOffsetStr $timeZoneId".lowercase()
+
+    /**
+     * Clean user-facing display string for this location:
+     * e.g., "United States" for whole country, or "New York, United States" for a specific city.
+     * Prevents duplicate text like "United States, United States".
+     */
+    val displayLocation: String
+        get() = if (isCountryPrimary || cityName.equals(countryName, ignoreCase = true) || cityName.isBlank()) {
+            countryName
+        } else {
+            "$cityName, $countryName"
+        }
 }

@@ -77,6 +77,20 @@ class TaskRepository(private val database: AppDatabase) {
         task.copy(isCompleted = updatedCompleted)
     }
 
+    suspend fun updateTaskPriority(taskId: String, priority: String) = withContext(Dispatchers.IO) {
+        taskDao.updateTaskPriority(taskId, priority)
+    }
+
+    suspend fun updateTasksPriorities(priorities: Map<String, String>) = withContext(Dispatchers.IO) {
+        priorities.forEach { (taskId, priority) ->
+            taskDao.updateTaskPriority(taskId, priority)
+        }
+    }
+
+    suspend fun updateTaskSchedule(taskId: String, time: String, date: String, epochDay: Long) = withContext(Dispatchers.IO) {
+        taskDao.updateTaskSchedule(taskId, time, date, epochDay)
+    }
+
     suspend fun clearCompletedTasks(userId: String = AuthManager.currentUserId ?: "") = withContext(Dispatchers.IO) {
         if (userId.isNotBlank()) {
             taskDao.deleteCompletedTasksForUser(userId)
@@ -121,11 +135,11 @@ class TaskRepository(private val database: AppDatabase) {
         if (taskDao.getTaskCountForUser(userId) == 0) {
             val todayEpoch = System.currentTimeMillis() / (1000 * 60 * 60 * 24)
             val starterTasks = listOf(
-                TaskEntity(UUID.randomUUID().toString(), "Review design specs", "Work", "Today", "09:30 AM", false, todayEpoch, userId, 1000L),
-                TaskEntity(UUID.randomUUID().toString(), "Grocery shopping", "Personal", "Today", "11:00 AM", true, todayEpoch, userId, 2000L),
-                TaskEntity(UUID.randomUUID().toString(), "Team sync at 2 PM", "Work", "Today", "02:00 PM", false, todayEpoch, userId, 3000L),
-                TaskEntity(UUID.randomUUID().toString(), "Health checkup", "Health", "Today", "03:30 PM", false, todayEpoch, userId, 4000L),
-                TaskEntity(UUID.randomUUID().toString(), "Study Compose layout", "Study", "Today", "06:45 PM", false, todayEpoch, userId, 5000L)
+                TaskEntity(UUID.randomUUID().toString(), "Review design specs", "Work", "Today", "09:30 AM", false, todayEpoch, userId, "HIGH", 1000L),
+                TaskEntity(UUID.randomUUID().toString(), "Grocery shopping", "Personal", "Today", "11:00 AM", true, todayEpoch, userId, "LOW", 2000L),
+                TaskEntity(UUID.randomUUID().toString(), "Team sync at 2 PM", "Work", "Today", "02:00 PM", false, todayEpoch, userId, "HIGH", 3000L),
+                TaskEntity(UUID.randomUUID().toString(), "Health checkup", "Health", "Today", "03:30 PM", false, todayEpoch, userId, "MEDIUM", 4000L),
+                TaskEntity(UUID.randomUUID().toString(), "Study Compose layout", "Study", "Today", "06:45 PM", false, todayEpoch, userId, "MEDIUM", 5000L)
             )
             taskDao.insertTasks(starterTasks)
         }

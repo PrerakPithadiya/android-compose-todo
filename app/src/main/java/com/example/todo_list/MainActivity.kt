@@ -43,6 +43,12 @@ class MainActivity : FragmentActivity() {
         // Initialize persistent Haptics state
         com.example.todo_list.utils.HapticManager.initialize(this)
 
+        // Initialize persistent App Icon Customization state
+        com.example.todo_list.manager.AppIconManager.initialize(this)
+
+        // Initialize persistent TaskFlow Intelligence AI state
+        com.example.todo_list.ai.AiConfigurationManager.initialize(this)
+
         // Enforce 120Hz high refresh rate display mode & prevent OS throttling
         com.example.todo_list.utils.HighRefreshRateManager.enableHighRefreshRate(this)
 

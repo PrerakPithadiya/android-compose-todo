@@ -64,6 +64,12 @@ interface TaskDao {
     @Query("UPDATE tasks SET isCompleted = :isCompleted WHERE id = :taskId")
     suspend fun updateTaskCompletion(taskId: String, isCompleted: Boolean)
 
+    @Query("UPDATE tasks SET priority = :priority WHERE id = :taskId")
+    suspend fun updateTaskPriority(taskId: String, priority: String)
+
+    @Query("UPDATE tasks SET time = :time, date = :date, epochDay = :epochDay WHERE id = :taskId")
+    suspend fun updateTaskSchedule(taskId: String, time: String, date: String, epochDay: Long)
+
     @Query("SELECT COUNT(*) FROM tasks")
     suspend fun getTaskCount(): Int
 

@@ -20,9 +20,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DeleteOutline
+import com.example.todo_list.ui.components.ai.TaskFlowIntelligenceSheet
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AccessTime
@@ -130,6 +132,7 @@ fun HomeScreen(
     var searchQuery by remember { mutableStateOf("") }
     var prefilledTaskCategory by remember { mutableStateOf<String?>(null) }
     var showTimezonePickerSheet by remember { mutableStateOf(false) }
+    var showIntelligenceSheet by remember { mutableStateOf(false) }
 
     val onToggleCompleteHelper: (TaskItem) -> Unit = remember(context, taskRepository, coroutineScope) {
         { toggledTask: TaskItem ->
@@ -214,7 +217,8 @@ fun HomeScreen(
                         searchQuery = searchQuery,
                         onSearchQueryChange = { searchQuery = it },
                         onAddTaskClick = { showAddTaskSheet = true },
-                        onProfileClick = { showProfileScreen = true }
+                        onProfileClick = { showProfileScreen = true },
+                        onIntelligenceClick = { showIntelligenceSheet = true }
                     )
                 }
             },
@@ -264,6 +268,16 @@ fun HomeScreen(
                         StatusBentoCard(
                             remainingTasks = remainingTasks,
                             progressRatio = progressRatio
+                        )
+                    }
+
+                    item(key = "intelligence_insight") {
+                        IntelligenceInsightCard(
+                            pendingTasksCount = remainingTasks,
+                            onOptimizeClick = {
+                                HapticManager.performClick(context)
+                                showIntelligenceSheet = true
+                            }
                         )
                     }
 
@@ -463,6 +477,124 @@ fun HomeScreen(
             onDismiss = { showTimezonePickerSheet = false }
         )
     }
+
+    // TaskFlow Intelligence Modal Sheet (Small LLM & Schedule Optimizer)
+    if (showIntelligenceSheet) {
+        TaskFlowIntelligenceSheet(
+            tasks = taskList,
+            categories = categoriesList,
+            onDismiss = { showIntelligenceSheet = false },
+            onApplySchedule = { slots ->
+                coroutineScope.launch {
+                    val todayEpoch = System.currentTimeMillis() / (1000 * 60 * 60 * 24)
+                    slots.forEach { slot ->
+                        if (slot.isTimeChanged) {
+                            taskRepository.updateTaskSchedule(
+                                taskId = slot.taskId,
+                                time = slot.suggestedTime,
+                                date = "Today",
+                                epochDay = todayEpoch
+                            )
+                        }
+                    }
+                }
+            },
+            onApplyPriorities = { prioritiesMap ->
+                coroutineScope.launch {
+                    taskRepository.updateTasksPriorities(prioritiesMap)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun IntelligenceInsightCard(
+    pendingTasksCount: Int,
+    onOptimizeClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = SystemSurface,
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOptimizeClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x1A007AFF)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "TaskFlow Intelligence",
+                        tint = SystemBlue,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "TaskFlow Intelligence",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SystemLabelPrimary
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0x1A007AFF))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "AI",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SystemBlue
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (pendingTasksCount > 0)
+                            "Auto-prioritize & optimize your $pendingTasksCount pending tasks"
+                        else
+                            "Daily schedule planned • Tap to ask questions",
+                        fontSize = 13.sp,
+                        color = SystemLabelSecondary,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Text(
+                text = "Plan ➔",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = SystemBlue
+            )
+        }
+    }
 }
 
 @Composable
@@ -471,7 +603,8 @@ fun HeaderBar(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onAddTaskClick: () -> Unit,
-    onProfileClick: () -> Unit = {}
+    onProfileClick: () -> Unit = {},
+    onIntelligenceClick: () -> Unit = {}
 ) {
     Surface(
         color = SystemSurface.copy(alpha = 0.95f),
@@ -502,9 +635,25 @@ fun HeaderBar(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     val context = LocalContext.current
+                    // Apple Intelligence Sparkle Button
+                    IconButton(
+                        onClick = {
+                            HapticManager.performClick(context)
+                            onIntelligenceClick()
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "TaskFlow Intelligence",
+                            tint = SystemBlue,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
                     IconButton(
                         onClick = {
                             HapticManager.performClick(context)
@@ -786,6 +935,23 @@ fun TaskCardItem(
                         fontSize = 13.sp,
                         color = if (task.isCompleted) SystemLabelTertiary else SystemLabelSecondary
                     )
+
+                    if (task.priority != "NONE") {
+                        val prio = task.getPriorityEnum()
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(prio.badgeBgHex))
+                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = prio.label,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(prio.colorHex)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1184,6 +1350,7 @@ fun CreateTaskBottomSheet(
     var selectedDate by remember { mutableStateOf("Today") }
     var selectedEpochDay by remember { mutableStateOf(currentEpochDay) }
     var selectedTime by remember(is24Hour) { mutableStateOf(if (is24Hour) "17:00" else "05:00 PM") }
+    var selectedPriority by remember { mutableStateOf("NONE") }
     var titleError by remember { mutableStateOf(false) }
 
     var showAnalogClock by remember { mutableStateOf(false) }
@@ -1544,6 +1711,41 @@ fun CreateTaskBottomSheet(
                 }
             }
 
+            // Priority Selection Row
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "PRIORITY",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SystemLabelSecondary,
+                    letterSpacing = 0.5.sp
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf(
+                        com.example.todo_list.model.TaskPriority.NONE to "None",
+                        com.example.todo_list.model.TaskPriority.LOW to "Low",
+                        com.example.todo_list.model.TaskPriority.MEDIUM to "Medium",
+                        com.example.todo_list.model.TaskPriority.HIGH to "High"
+                    ).forEach { (prioEnum, label) ->
+                        val isSelected = selectedPriority == prioEnum.key
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedPriority = prioEnum.key },
+                            label = { Text(label, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = if (prioEnum == com.example.todo_list.model.TaskPriority.NONE) SystemGray5 else Color(prioEnum.badgeBgHex),
+                                selectedLabelColor = if (prioEnum == com.example.todo_list.model.TaskPriority.NONE) SystemLabelPrimary else Color(prioEnum.colorHex)
+                            )
+                        )
+                    }
+                }
+            }
+
             Button(
                 onClick = {
                     if (taskTitle.isBlank()) {
@@ -1558,7 +1760,8 @@ fun CreateTaskBottomSheet(
                                 date = selectedDate,
                                 time = selectedTime.ifBlank { "12:00 PM" },
                                 isCompleted = false,
-                                epochDay = selectedEpochDay
+                                epochDay = selectedEpochDay,
+                                priority = selectedPriority
                             )
                         )
                     }
@@ -1615,6 +1818,7 @@ fun EditTaskBottomSheet(
     var selectedTime by remember(task.time, is24Hour) {
         mutableStateOf(TimeFormatHelper.formatTimeForDisplay(task.time, is24Hour))
     }
+    var selectedPriority by remember(task.priority) { mutableStateOf(task.priority) }
     var titleError by remember { mutableStateOf(false) }
 
     var showAnalogClock by remember { mutableStateOf(false) }
@@ -1997,6 +2201,41 @@ fun EditTaskBottomSheet(
                 }
             }
 
+            // Priority Selection Row
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "PRIORITY",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SystemLabelSecondary,
+                    letterSpacing = 0.5.sp
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf(
+                        com.example.todo_list.model.TaskPriority.NONE to "None",
+                        com.example.todo_list.model.TaskPriority.LOW to "Low",
+                        com.example.todo_list.model.TaskPriority.MEDIUM to "Medium",
+                        com.example.todo_list.model.TaskPriority.HIGH to "High"
+                    ).forEach { (prioEnum, label) ->
+                        val isSelected = selectedPriority == prioEnum.key
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedPriority = prioEnum.key },
+                            label = { Text(label, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = if (prioEnum == com.example.todo_list.model.TaskPriority.NONE) SystemGray5 else Color(prioEnum.badgeBgHex),
+                                selectedLabelColor = if (prioEnum == com.example.todo_list.model.TaskPriority.NONE) SystemLabelPrimary else Color(prioEnum.colorHex)
+                            )
+                        )
+                    }
+                }
+            }
+
             // Save Changes Button
             Button(
                 onClick = {
@@ -2009,7 +2248,8 @@ fun EditTaskBottomSheet(
                                 category = selectedCategory,
                                 date = selectedDate,
                                 time = selectedTime.ifBlank { "12:00 PM" },
-                                epochDay = selectedEpochDay
+                                epochDay = selectedEpochDay,
+                                priority = selectedPriority
                             )
                         )
                     }

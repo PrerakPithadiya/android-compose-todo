@@ -171,7 +171,7 @@ object TimePreferencesManager {
 
             val builder = NotificationCompat.Builder(context, TIMEZONE_NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_menu_my_calendar)
-                .setContentTitle("🌍 Time Zone Detected: ${location.cityName}, ${location.countryName}")
+                .setContentTitle("🌍 Time Zone Detected: ${location.displayLocation}")
                 .setContentText("Tasks and reminders synchronized to ${location.timeZoneAbbr} (${location.utcOffsetStr})")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)

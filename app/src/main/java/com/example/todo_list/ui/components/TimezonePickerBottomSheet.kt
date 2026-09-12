@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
@@ -24,8 +26,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.todo_list.data.repository.WorldTimezoneRepository
@@ -130,7 +136,7 @@ fun TimezonePickerBottomSheet(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = "${currentLocation.cityName}, ${currentLocation.countryName}",
+                                    text = currentLocation.displayLocation,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = SystemLabelPrimary
@@ -169,16 +175,17 @@ fun TimezonePickerBottomSheet(
 
             // iOS Styled Search Input Bar
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = SystemGray5,
-                modifier = Modifier.fillMaxWidth()
+                shape = RoundedCornerShape(10.dp),
+                color = SearchInputBackground,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(42.dp)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Search,
@@ -186,32 +193,42 @@ fun TimezonePickerBottomSheet(
                         tint = SystemLabelSecondary,
                         modifier = Modifier.size(18.dp)
                     )
-
-                    TextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (searchQuery.isEmpty()) {
                             Text(
                                 text = "Search country, city, or standard time...",
-                                fontSize = 14.sp,
-                                color = SystemLabelSecondary
+                                fontSize = 15.sp,
+                                color = SystemLabelSecondary,
+                                maxLines = 1
                             )
-                        },
-                        singleLine = true,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
-                    )
+                        }
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = SystemLabelPrimary
+                            ),
+                            cursorBrush = SolidColor(SystemBlue),
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = ImeAction.Search
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
                     if (searchQuery.isNotEmpty()) {
                         IconButton(
-                            onClick = { searchQuery = "" },
+                            onClick = {
+                                HapticManager.performClick(context)
+                                searchQuery = ""
+                            },
                             modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
@@ -229,7 +246,8 @@ fun TimezonePickerBottomSheet(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 420.dp),
+                    .heightIn(max = 450.dp)
+                    .weight(1f, fill = false),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Section 1: Matching Country (if query matches a Country name)
@@ -249,8 +267,10 @@ fun TimezonePickerBottomSheet(
                         val isSelected = currentLocation.countryCode.equals(country.countryCode, ignoreCase = true) &&
                                 currentLocation.timeZoneId == country.timeZoneId
 
+                        val countryLiveTime = TimeFormatHelper.getFormattedCurrentTime(country.timeZoneId, is24Hour)
+
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = if (isSelected) SystemBlueLight else SystemGroupedBackground,
                             border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, SystemBlue) else null,
                             modifier = Modifier
@@ -272,36 +292,48 @@ fun TimezonePickerBottomSheet(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.weight(1f)
                                 ) {
                                     Text(text = country.flagEmoji, fontSize = 24.sp)
-                                    Column {
+                                    Column(modifier = Modifier.weight(1f, fill = false)) {
                                         Text(
                                             text = country.countryName,
                                             fontSize = 16.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = if (isSelected) SystemBlue else SystemLabelPrimary
+                                            color = if (isSelected) SystemBlue else SystemLabelPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = "Standard Time: ${country.timeZoneAbbr} (${country.utcOffsetStr})",
                                             fontSize = 12.sp,
-                                            color = SystemLabelSecondary
+                                            color = SystemLabelSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
 
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (isSelected) SystemBlue else SystemSurface,
-                                    border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
-                                        text = if (isSelected) "Selected" else "Set Country",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSelected) Color.White else SystemBlue,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        text = countryLiveTime,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isSelected) SystemBlue else SystemLabelSecondary
                                     )
+
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Selected",
+                                            tint = SystemBlue,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -354,17 +386,21 @@ fun TimezonePickerBottomSheet(
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Text(text = city.flagEmoji, fontSize = 20.sp)
-                                    Column {
+                                    Column(modifier = Modifier.weight(1f, fill = false)) {
                                         Text(
                                             text = "${city.cityName}, ${city.countryName}",
                                             fontSize = 15.sp,
                                             fontWeight = FontWeight.Medium,
-                                            color = if (isSelected) SystemBlue else SystemLabelPrimary
+                                            color = if (isSelected) SystemBlue else SystemLabelPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
                                             text = "${city.timeZoneAbbr} • ${city.utcOffsetStr}",
                                             fontSize = 12.sp,
-                                            color = SystemLabelSecondary
+                                            color = SystemLabelSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }

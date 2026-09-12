@@ -19,11 +19,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import com.example.todo_list.ai.AiConfigurationManager
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,10 +34,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.items
 import com.example.todo_list.model.TaskItem
 import com.example.todo_list.model.TaskListCategory
@@ -51,6 +57,8 @@ import com.example.todo_list.ui.theme.*
 import com.example.todo_list.utils.HapticIntensity
 import com.example.todo_list.utils.HapticManager
 import com.example.todo_list.manager.TimePreferencesManager
+import com.example.todo_list.manager.AppIcon
+import com.example.todo_list.manager.AppIconManager
 import com.example.todo_list.model.WorldLocation
 import com.example.todo_list.ui.components.TimezonePickerBottomSheet
 import com.example.todo_list.utils.TimeFormatHelper
@@ -92,7 +100,7 @@ fun SettingsScreen(
     var autoArchiveOption by remember { mutableStateOf("After 7 Days") }
 
     // Customization & Appearance state
-    var selectedAppIcon by remember { mutableStateOf("Classic iOS") }
+    val currentAppIcon = AppIconManager.currentAppIcon
     var compactModeEnabled by remember { mutableStateOf(false) }
 
     // Security & Data
@@ -220,8 +228,7 @@ fun SettingsScreen(
                                         1 -> HapticIntensity.MEDIUM
                                         else -> HapticIntensity.STRONG
                                     }
-                                    HapticManager.updateHapticIntensity(newIntensity)
-                                    HapticManager.performClick(context)
+                                    HapticManager.updateHapticIntensity(newIntensity, context)
                                 },
                                 showDivider = true
                             )
@@ -266,12 +273,11 @@ fun SettingsScreen(
                             icon = Icons.Outlined.Schedule,
                             iconTint = SystemBlue,
                             title = "Time Format",
-                            options = listOf("12-Hour (AM/PM)", "24-Hour"),
+                            options = listOf("12-Hour", "24-Hour"),
                             selectedIndex = if (TimePreferencesManager.is24HourFormat) 1 else 0,
                             accentColor = SystemBlue,
                             onOptionSelected = { idx ->
                                 TimePreferencesManager.setTimeFormat(idx == 1)
-                                HapticManager.performClick(context)
                             },
                             showDivider = true
                         )
@@ -282,7 +288,7 @@ fun SettingsScreen(
                             iconTint = AppleHealth,
                             title = "Set Automatically",
                             subtitle = if (TimePreferencesManager.isAutoDetectEnabled) {
-                                "Using device location: ${currentLoc.cityName}, ${currentLoc.countryName}"
+                                "Using device location: ${currentLoc.displayLocation}"
                             } else {
                                 "Manual time zone selection active"
                             },
@@ -301,17 +307,25 @@ fun SettingsScreen(
                             icon = Icons.Outlined.LocationOn,
                             iconTint = AppleStudy,
                             title = "Region & City",
-                            value = "${currentLoc.flagEmoji} ${currentLoc.cityName}, ${currentLoc.countryName}",
+                            value = "${currentLoc.flagEmoji} ${currentLoc.displayLocation}",
                             onClick = { showTimezonePickerSheet = true },
                             showDivider = true
                         )
 
                         // Time Zone details
+                        val tzDisplay = if (currentLoc.timeZoneAbbr.startsWith("GMT", ignoreCase = true) ||
+                            currentLoc.timeZoneAbbr.startsWith("UTC", ignoreCase = true) ||
+                            currentLoc.timeZoneAbbr.isBlank()
+                        ) {
+                            currentLoc.utcOffsetStr
+                        } else {
+                            "${currentLoc.timeZoneAbbr} (${currentLoc.utcOffsetStr})"
+                        }
                         SettingsValueRow(
                             icon = Icons.Outlined.Language,
                             iconTint = SystemBlue,
                             title = "Time Zone",
-                            value = "${currentLoc.timeZoneAbbr} (${currentLoc.utcOffsetStr})",
+                            value = tzDisplay,
                             onClick = { showTimezonePickerSheet = true },
                             showDivider = true
                         )
@@ -378,7 +392,7 @@ fun SettingsScreen(
                             icon = Icons.Outlined.AppShortcut,
                             iconTint = ApplePersonal,
                             title = "App Icon",
-                            value = selectedAppIcon,
+                            value = currentAppIcon.displayName,
                             onClick = { showAppIconSheet = true },
                             showDivider = true
                         )
@@ -393,6 +407,195 @@ fun SettingsScreen(
                             onCheckedChange = { compactModeEnabled = it },
                             showDivider = false
                         )
+                    }
+                }
+            }
+
+            // TaskFlow Intelligence & Small LLM Settings Group
+            item(key = "settings_ai_intelligence_group") {
+                var apiKeyText by remember { mutableStateOf(AiConfigurationManager.apiKey) }
+                var isApiKeyVisible by remember { mutableStateOf(false) }
+                var testStatusMessage by remember { mutableStateOf<String?>(null) }
+                var isTestingConnection by remember { mutableStateOf(false) }
+                val scope = rememberCoroutineScope()
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionHeaderTitle(title = "APPLE INTELLIGENCE & LLM")
+                    SettingsGroupCard {
+                        // Model Selector Segmented Row
+                        SettingsSegmentedRow(
+                            icon = Icons.Default.AutoAwesome,
+                            iconTint = SystemBlue,
+                            title = "AI Engine",
+                            options = listOf("Gemini 1.5", "Gemini 2.0", "On-Device"),
+                            selectedIndex = when (AiConfigurationManager.selectedModel) {
+                                AiConfigurationManager.MODEL_GEMINI_1_5_FLASH -> 0
+                                AiConfigurationManager.MODEL_GEMINI_2_0_FLASH -> 1
+                                else -> 2
+                            },
+                            accentColor = SystemBlue,
+                            onOptionSelected = { idx ->
+                                val newModel = when (idx) {
+                                    0 -> AiConfigurationManager.MODEL_GEMINI_1_5_FLASH
+                                    1 -> AiConfigurationManager.MODEL_GEMINI_2_0_FLASH
+                                    else -> AiConfigurationManager.MODEL_LOCAL_HEURISTIC
+                                }
+                                AiConfigurationManager.selectedModel = newModel
+                                testStatusMessage = null
+                            },
+                            showDivider = true
+                        )
+
+                        // API Key Input Row (if Gemini is selected)
+                        if (AiConfigurationManager.selectedModel != AiConfigurationManager.MODEL_LOCAL_HEURISTIC) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Google Gemini API Key",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = SystemLabelPrimary
+                                    )
+                                    Text(
+                                        text = if (isApiKeyVisible) "Hide" else "Show",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = SystemBlue,
+                                        modifier = Modifier.clickable { isApiKeyVisible = !isApiKeyVisible }
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SystemSurfaceSecondary,
+                                    border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                    ) {
+                                        androidx.compose.foundation.text.BasicTextField(
+                                            value = apiKeyText,
+                                            onValueChange = {
+                                                apiKeyText = it
+                                                AiConfigurationManager.apiKey = it
+                                                testStatusMessage = null
+                                            },
+                                            singleLine = true,
+                                            visualTransformation = if (isApiKeyVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                            textStyle = TextStyle(fontSize = 14.sp, color = SystemLabelPrimary),
+                                            modifier = Modifier.weight(1f),
+                                            decorationBox = { innerTextField ->
+                                                if (apiKeyText.isEmpty()) {
+                                                    Text(
+                                                        text = "Paste Gemini API key from AI Studio",
+                                                        fontSize = 13.sp,
+                                                        color = SystemLabelSecondary
+                                                    )
+                                                }
+                                                innerTextField()
+                                            }
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                // Test Connection Button & Status Banner
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextButton(
+                                        onClick = {
+                                            isTestingConnection = true
+                                            testStatusMessage = "Verifying credentials..."
+                                            scope.launch {
+                                                val res = AiConfigurationManager.testConnection(apiKeyText)
+                                                isTestingConnection = false
+                                                testStatusMessage = res.getOrElse { it.message ?: "Failed" }
+                                            }
+                                        },
+                                        enabled = apiKeyText.isNotBlank() && !isTestingConnection
+                                    ) {
+                                        Text(
+                                            text = if (isTestingConnection) "Verifying..." else "Test Connection",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = SystemBlue
+                                        )
+                                    }
+
+                                    testStatusMessage?.let { msg ->
+                                        val isOk = msg.startsWith("Connection verified")
+                                        Text(
+                                            text = if (isOk) "✓ Active" else "✗ Error",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isOk) SystemGreen else SystemRed
+                                        )
+                                    }
+                                }
+
+                                testStatusMessage?.let { msg ->
+                                    Text(
+                                        text = msg,
+                                        fontSize = 12.sp,
+                                        color = if (msg.startsWith("Connection verified")) SystemGreen else SystemRed,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                            }
+
+                            HorizontalDivider(
+                                color = SystemDivider,
+                                thickness = 0.5.dp,
+                                modifier = Modifier.padding(start = 16.dp)
+                            )
+                        }
+
+                        // Offline Heuristic Fallback Toggle
+                        SettingsSwitchRow(
+                            icon = Icons.Outlined.CloudOff,
+                            iconTint = AppleHealth,
+                            title = "Offline Fallback Engine",
+                            subtitle = "Use local optimizer when offline or unconfigured",
+                            checked = AiConfigurationManager.isHeuristicFallbackEnabled,
+                            accentColor = SystemBlue,
+                            onCheckedChange = { isChecked ->
+                                AiConfigurationManager.isHeuristicFallbackEnabled = isChecked
+                            },
+                            showDivider = true
+                        )
+
+                        // Anti-Hallucination & Privacy Notice
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                            Text(
+                                text = "🔒 Zero-Hallucination & Privacy Guarantee",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SystemLabelPrimary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "TaskFlow Intelligence answers strictly based on your SQLite task data with mathematical task ID cross-validation. No phantom tasks or data leakage.",
+                                fontSize = 11.sp,
+                                lineHeight = 15.sp,
+                                color = SystemLabelSecondary
+                            )
+                        }
                     }
                 }
             }
@@ -579,7 +782,7 @@ fun SettingsScreen(
         TimezonePickerBottomSheet(
             onDismiss = { showTimezonePickerSheet = false },
             onLocationSelected = { loc ->
-                Toast.makeText(context, "Location set to ${loc.cityName}, ${loc.countryName}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Location set to ${loc.displayLocation}", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -877,48 +1080,100 @@ fun SettingsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp),
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Select App Icon Style",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SystemLabelPrimary
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "App Icon",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SystemLabelPrimary
+                    )
+                    Text(
+                        text = "Select an authentic Apple-styled launcher icon for your home screen:",
+                        fontSize = 14.sp,
+                        color = SystemLabelSecondary
+                    )
+                }
 
-                listOf("Classic iOS", "Dark Minimal", "Neon Blue Glow", "Glassmorphism").forEach { iconName ->
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (selectedAppIcon == iconName) SystemBlueLight else SystemGroupedBackground,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                selectedAppIcon = iconName
-                                showAppIconSheet = false
-                                Toast.makeText(context, "App icon updated to $iconName", Toast.LENGTH_SHORT).show()
-                            }
-                    ) {
-                        Row(
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AppIcon.entries.forEach { appIcon ->
+                        val isSelected = currentAppIcon == appIcon
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) SystemBlueLight else SystemGroupedBackground,
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = if (isSelected) 1.5.dp else 0.5.dp,
+                                color = if (isSelected) SystemBlue else SystemDivider
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .clickable {
+                                    val success = AppIconManager.setAppIcon(context, appIcon)
+                                    HapticManager.performClick(context)
+                                    showAppIconSheet = false
+                                    if (success) {
+                                        Toast.makeText(
+                                            context,
+                                            "App icon updated to ${appIcon.displayName}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Failed to update app icon",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
                         ) {
-                            Text(
-                                text = iconName,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (selectedAppIcon == iconName) SystemBlue else SystemLabelPrimary
-                            )
-                            if (selectedAppIcon == iconName) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Check,
-                                    contentDescription = "Selected",
-                                    tint = SystemBlue,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    AppIconPreviewBadge(appIcon = appIcon)
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = appIcon.displayName,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isSelected) SystemBlue else SystemLabelPrimary
+                                        )
+                                        Text(
+                                            text = appIcon.subtitle,
+                                            fontSize = 13.sp,
+                                            color = SystemLabelSecondary
+                                        )
+                                    }
+                                }
+                                if (isSelected) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = SystemBlue,
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Selected",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1456,26 +1711,35 @@ fun SettingsValueRow(
                     onClick()
                 }
                 .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
             SettingsRowIcon(icon = icon, iconTint = iconTint)
+
+            Spacer(modifier = Modifier.width(12.dp))
 
             Text(
                 text = title,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
                 color = SystemLabelPrimary,
-                modifier = Modifier.weight(1f)
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             Text(
                 text = value,
                 fontSize = 15.sp,
-                color = SystemLabelSecondary
+                color = SystemLabelSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f)
             )
 
             if (showChevron) {
+                Spacer(modifier = Modifier.width(6.dp))
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
                     contentDescription = null,
@@ -1515,20 +1779,24 @@ fun SettingsActionRow(
                     onClick()
                 }
                 .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            verticalAlignment = Alignment.CenterVertically
         ) {
             SettingsRowIcon(icon = icon, iconTint = if (enabled) iconTint else SystemGray)
+
+            Spacer(modifier = Modifier.width(12.dp))
 
             Text(
                 text = title,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
                 color = if (enabled) SystemLabelPrimary else SystemLabelSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
 
             badgeText?.let {
+                Spacer(modifier = Modifier.width(8.dp))
                 Surface(
                     color = iconTint.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(8.dp)
@@ -1542,6 +1810,8 @@ fun SettingsActionRow(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.width(6.dp))
 
             Icon(
                 imageVector = Icons.Default.ChevronRight,
@@ -1570,58 +1840,146 @@ fun SettingsSegmentedRow(
     selectedIndex: Int,
     accentColor: Color = Color.Unspecified,
     onOptionSelected: (Int) -> Unit,
-    showDivider: Boolean = true
+    showDivider: Boolean = true,
+    isStacked: Boolean = true
 ) {
     val context = LocalContext.current
     val activeAccent = if (accentColor != Color.Unspecified) accentColor else SystemBlue
+    val isDark = LocalTaskFlowColors.current.isDark
+
+    val trackColor = if (isDark) Color(0x3D767680) else SystemGroupedBackground
+    val selectedPillColor = if (isDark) Color(0xFF636366) else SystemSurface
+
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SettingsRowIcon(icon = icon, iconTint = iconTint)
-
-            Text(
-                text = title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = SystemLabelPrimary,
-                modifier = Modifier.weight(1f)
-            )
-
-            // iOS Segmented Control
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = SystemGroupedBackground,
-                modifier = Modifier.height(32.dp)
+        if (isStacked) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Header Row: Icon + Title
                 Row(
-                    modifier = Modifier.padding(2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    options.forEachIndexed { index, option ->
-                        val isSelected = index == selectedIndex
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (isSelected) SystemSurface else Color.Transparent,
-                            shadowElevation = if (isSelected) 1.dp else 0.dp,
-                            modifier = Modifier
-                                .clickable {
-                                    HapticManager.performClick(context)
-                                    onOptionSelected(index)
+                    SettingsRowIcon(icon = icon, iconTint = iconTint)
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Text(
+                        text = title,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = SystemLabelPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Full-width iOS Segmented Control
+                Surface(
+                    shape = RoundedCornerShape(9.dp),
+                    color = trackColor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(2.5.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        options.forEachIndexed { index, option ->
+                            val isSelected = index == selectedIndex
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isSelected) selectedPillColor else Color.Transparent,
+                                shadowElevation = if (isSelected && !isDark) 1.5.dp else 0.dp,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable {
+                                        onOptionSelected(index)
+                                        HapticManager.performClick(context)
+                                    }
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Text(
+                                        text = option,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                        color = if (isSelected) activeAccent else SystemLabelSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = option,
-                                fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) activeAccent else SystemLabelSecondary
-                            )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SettingsRowIcon(icon = icon, iconTint = iconTint)
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Text(
+                    text = title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = SystemLabelPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // iOS Segmented Control
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = trackColor,
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        options.forEachIndexed { index, option ->
+                            val isSelected = index == selectedIndex
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isSelected) selectedPillColor else Color.Transparent,
+                                shadowElevation = if (isSelected && !isDark) 1.dp else 0.dp,
+                                modifier = Modifier
+                                    .clickable {
+                                        onOptionSelected(index)
+                                        HapticManager.performClick(context)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = option,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) activeAccent else SystemLabelSecondary,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }
@@ -1659,7 +2017,9 @@ fun AccentColorSwatchRow(
                 text = "Accent Color",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                color = SystemLabelPrimary
+                color = SystemLabelPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -1934,16 +2294,19 @@ fun TimePreviewWidgetRow(
         color = SystemGroupedBackground,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 Text(
                     text = "LIVE WORLD CLOCK",
                     fontSize = 11.sp,
@@ -1952,12 +2315,16 @@ fun TimePreviewWidgetRow(
                     letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = "${location.flagEmoji} ${location.cityName}",
+                    text = "${location.flagEmoji} ${location.displayLocation}",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = SystemLabelPrimary
+                    color = SystemLabelPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
+
+            Spacer(modifier = Modifier.width(14.dp))
 
             Surface(
                 shape = RoundedCornerShape(8.dp),
@@ -1974,5 +2341,128 @@ fun TimePreviewWidgetRow(
         }
     }
 }
+
+/**
+ * Authentic Apple iOS squircle preview badge for launcher icon styles.
+ */
+@Composable
+fun AppIconPreviewBadge(
+    appIcon: AppIcon,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(13.dp)
+    Box(
+        modifier = modifier
+            .size(52.dp)
+            .clip(shape)
+            .then(
+                when (appIcon) {
+                    AppIcon.CLASSIC -> Modifier.background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(Color(0xFF0088FF), Color(0xFF0055D4))
+                        )
+                    )
+                    AppIcon.DARK -> Modifier.background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(Color(0xFF2C2C2E), Color(0xFF121214))
+                        )
+                    )
+                    AppIcon.NEON -> Modifier.background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(Color(0xFF0D1326), Color(0xFF050811))
+                        )
+                    )
+                    AppIcon.GLASS -> Modifier.background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(Color(0xFF6C5CE7), Color(0xFFFD79A8), Color(0xFF74B9FF))
+                        )
+                    )
+                }
+            )
+            .border(
+                width = 0.5.dp,
+                color = when (appIcon) {
+                    AppIcon.CLASSIC -> Color(0x33FFFFFF)
+                    AppIcon.DARK -> Color(0x33FFFFFF)
+                    AppIcon.NEON -> Color(0x4400F0FF)
+                    AppIcon.GLASS -> Color(0x66FFFFFF)
+                },
+                shape = shape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        when (appIcon) {
+            AppIcon.CLASSIC -> {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x22FFFFFF))
+                        .border(2.dp, Color.White, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            AppIcon.DARK -> {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x1AFFFFFF))
+                        .border(2.dp, Color(0xFF8E8E93), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color(0xFFF2F2F7),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            AppIcon.NEON -> {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x2000F0FF))
+                        .border(2.dp, Color(0xFF00F0FF), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color(0xFF00F0FF),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            AppIcon.GLASS -> {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x55FFFFFF))
+                        .border(1.5.dp, Color(0xCCFFFFFF), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 

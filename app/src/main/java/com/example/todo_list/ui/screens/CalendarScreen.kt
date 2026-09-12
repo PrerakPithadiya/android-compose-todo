@@ -848,18 +848,39 @@ fun CalendarTaskCardItem(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Right Category Badge Pill
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = categoryColor.copy(alpha = 0.12f)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = task.category.uppercase(),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = categoryColor,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                    if (task.priority != "NONE") {
+                        val prio = task.getPriorityEnum()
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(prio.badgeBgHex)
+                        ) {
+                            Text(
+                                text = prio.label.uppercase(),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(prio.colorHex),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    // Right Category Badge Pill
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = categoryColor.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = task.category.uppercase(),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = categoryColor,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
         }

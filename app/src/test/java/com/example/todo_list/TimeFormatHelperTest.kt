@@ -110,4 +110,17 @@ class TimeFormatHelperTest {
         val resultsZurich = WorldTimezoneRepository.search("Zurich")
         assertTrue(resultsZurich.cityMatches.any { it.cityName.contains("Zurich", ignoreCase = true) })
     }
+
+    @Test
+    fun testWorldLocation_displayLocation() {
+        val resultsUS = WorldTimezoneRepository.search("United States")
+        val usCountry = resultsUS.countryMatches.first { it.countryName.equals("United States", ignoreCase = true) }
+        // Country primary location should cleanly display "United States", not "United States, United States"
+        assertEquals("United States", usCountry.displayLocation)
+
+        val resultsTokyo = WorldTimezoneRepository.search("Tokyo")
+        val tokyoCity = resultsTokyo.cityMatches.first { it.cityName.equals("Tokyo", ignoreCase = true) }
+        // City location should display "Tokyo, Japan"
+        assertEquals("Tokyo, Japan", tokyoCity.displayLocation)
+    }
 }

@@ -25,6 +25,7 @@ data class TaskEntity(
     val isCompleted: Boolean = false,
     val epochDay: Long = 0L,
     val userId: String = "",
+    val priority: String = "NONE",
     val createdAt: Long = System.currentTimeMillis()
 ) {
     fun toModel(): TaskItem {
@@ -36,7 +37,8 @@ data class TaskEntity(
             time = time,
             isCompleted = isCompleted,
             epochDay = epochDay,
-            userId = userId
+            userId = userId,
+            priority = priority
         )
     }
 
@@ -51,6 +53,7 @@ data class TaskEntity(
                 isCompleted = model.isCompleted,
                 epochDay = model.epochDay,
                 userId = model.userId,
+                priority = model.priority,
                 createdAt = createdAt
             )
         }

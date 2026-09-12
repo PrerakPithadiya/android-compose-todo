@@ -62,6 +62,42 @@ TaskFlow is a modern, high-performance task management application for Android, 
 * **120Hz Refresh Rate**: Integrates `HighRefreshRateManager` to lock display refresh rates to maximum levels (120Hz/144Hz) and prevent Variable Refresh Rate (VRR) throttling.
 * **Rich Haptic Engine**: Incorporates customizable vibrations (Light, Medium, Strong intensities) for keypad entries, pattern drawing, and checklist actions.
 
+### 🎨 10. Dynamic App Icon Customization (Android Activity-Alias)
+* **Android `<activity-alias>` Architecture**: Full system-level launcher icon customization leveraging native Android `<activity-alias>` declarations pointing to `.MainActivity`, resolving the manifest launcher intent-filter properly without duplicate or missing launcher entries.
+* **4 Apple (iOS HIG) Curated Icon Styles**:
+  * **Classic iOS**: Apple System Blue gradient (`#007AFF` to `#0055D4`) with crisp circular checklist glyph.
+  * **Dark Minimal**: Deep obsidian/graphite dark aesthetic (`#1C1C1E` to `#0B0B0E`) with sleek silver border.
+  * **Neon Blue Glow**: Midnight deep navy background (`#0A0E1A`) with electric cyan radiant glow (`#00F0FF`).
+  * **Glassmorphism**: Apple chromatic aurora gradient (`#6C5CE7` -> `#FD79A8` -> `#74B9FF`) with frosted glass refraction badge.
+* **Zero-Downtime Icon Switching**: Executes component enablement with `PackageManager.DONT_KILL_APP` and enables target aliases before disabling inactive aliases to prevent launcher icon disappearance.
+* **Reactive Singleton State**: Managed via `AppIconManager` with SharedPreferences persistence, automatic PackageManager synchronization, and an authentic Apple squircle preview bottom sheet in Settings.
+
+### 🧠 11. Small LLM Integration: TaskFlow Intelligence & Schedule Optimizer
+* **Dual-Engine Hybrid Architecture**: Combines ultra-lightweight cloud intelligence (**Google Gemini 1.5 Flash / 2.0 Flash**) with an embedded **Deterministic On-Device Heuristic Engine** (`LocalScheduleOptimizer`) for instantaneous, 100% offline schedule planning with zero APK weight increase.
+* **100% User Data Access & Zero-Hallucination Guarantee**:
+  * **Dynamic Grounding Context (`TaskFlowContextBuilder`)**: Ingests and serializes the active user's real-time SQLite tasks, categories, profile identity, daily task goals, active focus status (`🎯 Deep Work`, `⚡ In the Flow`), morning digest settings, and regional timezone into a compact, structured JSON snapshot.
+  * **Closed-World Directives & Determinism**: Enforces closed-world system directives with `temperature = 0.0`, `topK = 1`, and strict JSON Schema output mode to eliminate creative drift.
+  * **Mathematical Cross-Validation Barrier (`TaskFlowCrossValidator`)**: Every suggested task ID and schedule returned by the LLM is cross-validated against the local Room SQLite database before reaching the UI. Non-existent or altered task IDs are automatically discarded, providing a mathematical guarantee against hallucinations.
+  * **Human-In-The-Loop Confirmation**: Displays clear visual diffs (e.g. original time vs. suggested time, priority adjustments) requiring explicit user confirmation before modifying SQLite tasks or alarms.
+* **Intelligent Schedule Planning & Time-Conflict Resolution**:
+  * Automatically detects overlapping time collisions (e.g. two tasks scheduled at 02:00 PM).
+  * Reorganizes tasks chronologically according to cognitive load and time of day.
+  * Identifies productivity buffer gaps (>90 minutes) and suggests restorative breaks.
+  * Recommends optimal Focus Status for the day.
+* **Auto-Suggest Task Priorities (Eisenhower Matrix)**:
+  * Automatically classifies tasks into authentic Apple HIG priority tiers: **🔴 High (P1 / Urgent & Important)**, **🟡 Medium (P2 / Important)**, and **🔵 Low (P3 / Flexible)**.
+  * Provides a 1-sentence transparent rationale grounded strictly in task deadline, category, and daily goal progress.
+  * 1-tap "Apply Priorities to All Tasks" writes priorities directly to SQLite database.
+* **Grounded Conversational Schedule Assistant ("Ask AI")**:
+  * Interactive Apple iOS chat sheet allowing natural language queries: "What should I focus on next?", "Do I have any schedule conflicts?", "How close am I to my daily goal?".
+  * Instant quick-action prompt chips for frictionless 1-tap questions.
+* **Apple (iOS HIG) UI/UX Integration**:
+  * Top Navigation Bar glowing sparkle action (`✦`) with Apple Intelligence gradient.
+  * Home Screen "TaskFlow Intelligence" insight bento card with real-time pending task counter.
+  * Authentic Apple modal bottom sheet (`28dp` radius) with 3 segmented tabs: *Schedule Plan*, *Priorities*, and *Ask AI*.
+  * Apple-styled priority pill badges on task cards across Home and Calendar screens.
+  * Dedicated "Apple Intelligence & LLM" section in Settings with API key management, live connection test diagnostics, and model selection.
+
 ---
 
 ## 🛠️ Technology Stack & Dependencies

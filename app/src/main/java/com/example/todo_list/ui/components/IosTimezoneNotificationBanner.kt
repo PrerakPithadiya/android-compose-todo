@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.todo_list.model.WorldLocation
@@ -136,15 +137,19 @@ fun IosTimezoneNotificationBanner(
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             Text(
-                                text = "Detected ${location.cityName}, ${location.countryName}",
+                                text = "Detected ${location.displayLocation}",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = SystemLabelPrimary
+                                color = SystemLabelPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = "Standard Time: ${location.timeZoneAbbr} (${location.utcOffsetStr})",
                                 fontSize = 13.sp,
-                                color = SystemLabelSecondary
+                                color = SystemLabelSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
