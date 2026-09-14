@@ -26,6 +26,7 @@ import kotlin.random.Random
 object AuthManager {
     private const val PREFS_NAME = "taskflow_auth_prefs"
     private const val KEY_ACTIVE_USER_ID = "key_active_user_id"
+    private const val KEY_EXPLICIT_LOGOUT = "key_explicit_logout"
 
     private var prefs: SharedPreferences? = null
     private var userDao: UserDao? = null
@@ -66,7 +67,7 @@ object AuthManager {
     var otpSentTimestamp by mutableStateOf(0L)
         private set
 
-    const val OTP_VALIDITY_SECONDS = 60
+    const val OTP_VALIDITY_SECONDS = 30
     var otpExpiryTimestamp by mutableStateOf(0L)
         private set
 
@@ -81,25 +82,39 @@ object AuthManager {
 
         CoroutineScope(Dispatchers.IO).launch {
             val userCount = userDao?.getUserCount() ?: 0
-            isAccountCreated = userCount > 0
-
+            val explicitLogout = prefs?.getBoolean(KEY_EXPLICIT_LOGOUT, false) ?: false
             val savedUserId = prefs?.getString(KEY_ACTIVE_USER_ID, null)
+
+            var resolvedUser: UserEntity? = null
             if (savedUserId != null) {
-                val user = userDao?.getUserById(savedUserId)
-                if (user != null) {
-                    withContext(Dispatchers.Main) {
-                        currentUser = user
-                        currentUserId = user.id
-                        isLoggedIn = true
-                        UserProfileManager.loadUserProfile(user)
-                        AppLockManager.loadUserLock(user)
-                    }
+                resolvedUser = userDao?.getUserById(savedUserId)
+            }
+
+            // Automatic fallback: If no active user is saved (e.g. crash before prefs flush
+            // or cache clearance), but accounts exist and the user didn't explicitly log out,
+            // recover the most recent user record.
+            if (resolvedUser == null && !explicitLogout && userCount > 0) {
+                resolvedUser = userDao?.getMostRecentUser()
+                resolvedUser?.let {
+                    prefs?.edit()
+                        ?.putString(KEY_ACTIVE_USER_ID, it.id)
+                        ?.putBoolean(KEY_EXPLICIT_LOGOUT, false)
+                        ?.commit()
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                isAccountCreated = userCount > 0
+                if (resolvedUser != null) {
+                    currentUser = resolvedUser
+                    currentUserId = resolvedUser.id
+                    isLoggedIn = true
+                    UserProfileManager.loadUserProfile(resolvedUser)
+                    AppLockManager.loadUserLock(resolvedUser)
                 } else {
-                    withContext(Dispatchers.Main) {
-                        isLoggedIn = false
-                        currentUserId = null
-                        currentUser = null
-                    }
+                    isLoggedIn = false
+                    currentUserId = null
+                    currentUser = null
                 }
             }
         }
@@ -110,7 +125,9 @@ object AuthManager {
      */
     suspend fun hasAnyUsers(): Boolean = withContext(Dispatchers.IO) {
         val count = userDao?.getUserCount() ?: 0
-        isAccountCreated = count > 0
+        withContext(Dispatchers.Main) {
+            isAccountCreated = count > 0
+        }
         count > 0
     }
 
@@ -209,7 +226,10 @@ object AuthManager {
             TaskRepository.getInstance(ctx).seedStarterTasksForUser(newUserId)
         }
 
-        prefs?.edit()?.putString(KEY_ACTIVE_USER_ID, newUserId)?.apply()
+        prefs?.edit()
+            ?.putString(KEY_ACTIVE_USER_ID, newUserId)
+            ?.putBoolean(KEY_EXPLICIT_LOGOUT, false)
+            ?.commit()
 
         withContext(Dispatchers.Main) {
             currentUser = newUser
@@ -237,7 +257,10 @@ object AuthManager {
         val inputHash = hashPassword(password, user.passwordSalt)
         if (inputHash == user.passwordHash) {
             dao.updateLastLogin(user.id)
-            prefs?.edit()?.putString(KEY_ACTIVE_USER_ID, user.id)?.apply()
+            prefs?.edit()
+                ?.putString(KEY_ACTIVE_USER_ID, user.id)
+                ?.putBoolean(KEY_EXPLICIT_LOGOUT, false)
+                ?.commit()
 
             withContext(Dispatchers.Main) {
                 currentUser = user
@@ -258,7 +281,10 @@ object AuthManager {
      * Log out current user session.
      */
     fun logout() {
-        prefs?.edit()?.remove(KEY_ACTIVE_USER_ID)?.apply()
+        prefs?.edit()
+            ?.remove(KEY_ACTIVE_USER_ID)
+            ?.putBoolean(KEY_EXPLICIT_LOGOUT, true)
+            ?.commit()
         currentUserId = null
         currentUser = null
         isLoggedIn = false

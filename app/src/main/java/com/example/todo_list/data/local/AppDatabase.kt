@@ -60,10 +60,12 @@ abstract class AppDatabase : RoomDatabase() {
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
-                        // Prepopulate default categories on background thread
-                        CoroutineScope(Dispatchers.IO).launch {
-                            val database = getInstance(context)
-                            prepopulateDefaults(database)
+                        // Prepopulate default categories directly into SQLite without recursive Room calls
+                        TaskListCategory.DEFAULT_CATEGORIES.forEachIndexed { index, cat ->
+                            db.execSQL(
+                                "INSERT OR IGNORE INTO categories (id, name, colorHex, iconName, isSystemDefault, displayOrder) VALUES (?, ?, ?, ?, ?, ?)",
+                                arrayOf(cat.id, cat.name, cat.colorHex, cat.iconName, if (cat.isSystemDefault) 1 else 0, index)
+                            )
                         }
                     }
                 })

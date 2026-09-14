@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.HourglassBottom
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,7 +35,7 @@ import kotlinx.coroutines.delay
 
 /**
  * Authentic Apple iOS Dynamic Push Notification Banner.
- * Simulates incoming SMS / Verification alert with 1-Tap Autofill support.
+ * Simulates incoming SMS / Verification alert with 30-Second Countdown and 1-Tap Autofill support.
  */
 @Composable
 fun IosNotificationBanner(
@@ -43,12 +46,16 @@ fun IosNotificationBanner(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var countdownSeconds by remember(visible, otpCode) { mutableIntStateOf(30) }
 
     LaunchedEffect(visible, otpCode) {
         if (visible && otpCode.isNotEmpty()) {
             HapticManager.performSuccess(context)
-            // Stays visible for 60 seconds matching OTP expiration countdown
-            delay(60000)
+            countdownSeconds = 30
+            while (countdownSeconds > 0) {
+                delay(1000)
+                countdownSeconds--
+            }
             onDismiss()
         }
     }
@@ -76,7 +83,6 @@ fun IosNotificationBanner(
                 .clickable {
                     HapticManager.performClick(context)
                     onAutofillClick(otpCode)
-                    onDismiss()
                 }
         ) {
             Column(
@@ -85,7 +91,7 @@ fun IosNotificationBanner(
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Header Row (App Icon, App Title, "now")
+                // Header Row (App Icon, App Title, Countdown Timer Pill, Close Button)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -119,11 +125,55 @@ fun IosNotificationBanner(
                         )
                     }
 
-                    Text(
-                        text = "now",
-                        fontSize = 12.sp,
-                        color = SystemLabelSecondary
-                    )
+                    // Countdown Timer Pill & Dismiss Action
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (countdownSeconds <= 10) SystemOrange.copy(alpha = 0.14f)
+                                    else SystemBlue.copy(alpha = 0.10f)
+                                )
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (countdownSeconds <= 10) Icons.Outlined.HourglassBottom else Icons.Outlined.Timer,
+                                contentDescription = "Timer",
+                                tint = if (countdownSeconds <= 10) SystemOrange else SystemBlue,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "${countdownSeconds}s",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (countdownSeconds <= 10) SystemOrange else SystemBlue
+                            )
+                        }
+
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(SystemDivider.copy(alpha = 0.6f))
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    onDismiss()
+                                }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Dismiss",
+                                tint = SystemLabelSecondary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
                 }
 
                 // Message Body
@@ -143,9 +193,9 @@ fun IosNotificationBanner(
                             color = SystemLabelPrimary
                         )
                         Text(
-                            text = "Valid for 60 seconds. Tap Autofill to enter.",
+                            text = "Valid for $countdownSeconds seconds. Tap Autofill to enter.",
                             fontSize = 13.sp,
-                            color = SystemLabelSecondary
+                            color = if (countdownSeconds <= 10) SystemOrange else SystemLabelSecondary
                         )
                     }
 
@@ -158,7 +208,6 @@ fun IosNotificationBanner(
                             .clickable {
                                 HapticManager.performSuccess(context)
                                 onAutofillClick(otpCode)
-                                onDismiss()
                             }
                     ) {
                         Row(

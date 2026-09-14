@@ -54,6 +54,8 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onNavigateToRegister: () -> Unit,
     onForgotPasswordOtpDispatched: (code: String) -> Unit,
+    autofillCode: String? = null,
+    onAutofillConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -379,7 +381,9 @@ fun LoginScreen(
             },
             onOtpDispatched = { otp ->
                 onForgotPasswordOtpDispatched(otp)
-            }
+            },
+            autofillCode = autofillCode,
+            onAutofillConsumed = onAutofillConsumed
         )
     }
 }

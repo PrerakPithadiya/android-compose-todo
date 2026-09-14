@@ -4,10 +4,14 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Path
 import androidx.annotation.DrawableRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.res.ResourcesCompat
 import com.example.todo_list.R
 
 /**
@@ -18,35 +22,90 @@ enum class AppIcon(
     val displayName: String,
     val aliasClassName: String,
     val subtitle: String,
-    @DrawableRes val iconResId: Int
+    @get:DrawableRes val iconResId: Int,
+    @get:DrawableRes val backgroundResId: Int,
+    @get:DrawableRes val foregroundResId: Int,
+    val accentColorInt: Int
 ) {
     CLASSIC(
         id = "classic",
         displayName = "Classic iOS",
         aliasClassName = "com.example.todo_list.MainActivityClassic",
         subtitle = "Apple System Blue signature look",
-        iconResId = R.mipmap.ic_launcher_classic
+        iconResId = R.mipmap.ic_launcher_classic,
+        backgroundResId = R.drawable.ic_launcher_classic_bg,
+        foregroundResId = R.drawable.ic_launcher_classic_fg,
+        accentColorInt = 0xFF007AFF.toInt()
     ),
     DARK(
         id = "dark",
         displayName = "Dark Minimal",
         aliasClassName = "com.example.todo_list.MainActivityDark",
         subtitle = "Deep obsidian stealth aesthetic",
-        iconResId = R.mipmap.ic_launcher_dark
+        iconResId = R.mipmap.ic_launcher_dark,
+        backgroundResId = R.drawable.ic_launcher_dark_bg,
+        foregroundResId = R.drawable.ic_launcher_dark_fg,
+        accentColorInt = 0xFF8E8E93.toInt()
     ),
     NEON(
         id = "neon",
         displayName = "Neon Blue Glow",
         aliasClassName = "com.example.todo_list.MainActivityNeon",
         subtitle = "Vibrant electric cyber glow",
-        iconResId = R.mipmap.ic_launcher_neon
+        iconResId = R.mipmap.ic_launcher_neon,
+        backgroundResId = R.drawable.ic_launcher_neon_bg,
+        foregroundResId = R.drawable.ic_launcher_neon_fg,
+        accentColorInt = 0xFF00F0FF.toInt()
     ),
     GLASS(
         id = "glass",
         displayName = "Glassmorphism",
         aliasClassName = "com.example.todo_list.MainActivityGlass",
         subtitle = "Frosted glass chromatic gradient",
-        iconResId = R.mipmap.ic_launcher_glass
+        iconResId = R.mipmap.ic_launcher_glass,
+        backgroundResId = R.drawable.ic_launcher_glass_bg,
+        foregroundResId = R.drawable.ic_launcher_glass_fg,
+        accentColorInt = 0xFF6C5CE7.toInt()
+    ),
+    SUNSET(
+        id = "sunset",
+        displayName = "Sunset Coral",
+        aliasClassName = "com.example.todo_list.MainActivitySunset",
+        subtitle = "Warm California twilight gradient",
+        iconResId = R.mipmap.ic_launcher_sunset,
+        backgroundResId = R.drawable.ic_launcher_sunset_bg,
+        foregroundResId = R.drawable.ic_launcher_sunset_fg,
+        accentColorInt = 0xFFFF5E3A.toInt()
+    ),
+    EMERALD(
+        id = "emerald",
+        displayName = "Emerald Mint",
+        aliasClassName = "com.example.todo_list.MainActivityEmerald",
+        subtitle = "Fresh natural Apple health green",
+        iconResId = R.mipmap.ic_launcher_emerald,
+        backgroundResId = R.drawable.ic_launcher_emerald_bg,
+        foregroundResId = R.drawable.ic_launcher_emerald_fg,
+        accentColorInt = 0xFF34C759.toInt()
+    ),
+    PURPLE(
+        id = "purple",
+        displayName = "Royal Purple",
+        aliasClassName = "com.example.todo_list.MainActivityPurple",
+        subtitle = "Regal iOS ultraviolet gradient",
+        iconResId = R.mipmap.ic_launcher_purple,
+        backgroundResId = R.drawable.ic_launcher_purple_bg,
+        foregroundResId = R.drawable.ic_launcher_purple_fg,
+        accentColorInt = 0xFFAF52DE.toInt()
+    ),
+    GOLD(
+        id = "gold",
+        displayName = "Champagne Gold",
+        aliasClassName = "com.example.todo_list.MainActivityGold",
+        subtitle = "Luxe warm metallic champagne glow",
+        iconResId = R.mipmap.ic_launcher_gold,
+        backgroundResId = R.drawable.ic_launcher_gold_bg,
+        foregroundResId = R.drawable.ic_launcher_gold_fg,
+        accentColorInt = 0xFFF6D365.toInt()
     );
 
     companion object {
@@ -74,7 +133,8 @@ object AppIconManager {
         private set
 
     /**
-     * Initializes the manager, reading stored preference or syncing with PackageManager.
+     * Initializes the manager by restoring the active icon preference without triggering
+     * runtime PackageManager component mutations on startup, preventing process termination.
      */
     fun initialize(context: Context) {
         val appContext = context.applicationContext
@@ -89,7 +149,9 @@ object AppIconManager {
         }
 
         currentAppIcon = activeIcon
-        syncComponentStates(appContext, activeIcon)
+        // NOTE: We deliberately do NOT call syncComponentStates() here during startup.
+        // Mutating launcher component settings inside onCreate() causes Android OS to kill
+        // the active foreground process to rebuild manifest entry points.
     }
 
     /**
@@ -97,6 +159,7 @@ object AppIconManager {
      * Uses PackageManager.DONT_KILL_APP to avoid killing the active application process.
      */
     fun setAppIcon(context: Context, newIcon: AppIcon): Boolean {
+        if (currentAppIcon == newIcon) return true
         val appContext = context.applicationContext
         try {
             val pm = appContext.packageManager
@@ -123,7 +186,7 @@ object AppIconManager {
 
             // 3. Persist selection and update reactive state
             currentAppIcon = newIcon
-            prefs?.edit()?.putString(KEY_SELECTED_ICON, newIcon.id)?.apply()
+            prefs?.edit()?.putString(KEY_SELECTED_ICON, newIcon.id)?.commit()
             return true
         } catch (e: Exception) {
             e.printStackTrace()
@@ -170,4 +233,60 @@ object AppIconManager {
             }
         }
     }
+
+    /**
+     * Safely returns the currently active AppIcon. Reads from SharedPreferences if currentAppIcon
+     * is not yet initialized (such as when called from a cold BroadcastReceiver lifecycle).
+     */
+    fun getActiveIcon(context: Context): AppIcon {
+        val appContext = context.applicationContext
+        val sp = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val savedId = sp.getString(KEY_SELECTED_ICON, null)
+        return if (savedId != null) {
+            AppIcon.fromId(savedId)
+        } else {
+            currentAppIcon
+        }
+    }
+
+    /**
+     * Composites and renders the AppIcon layers into a high-resolution Bitmap with Apple squircle
+     * curvature, suitable for NotificationCompat.Builder.setLargeIcon().
+     */
+    fun getIconBitmap(context: Context, appIcon: AppIcon): Bitmap {
+        val density = context.resources.displayMetrics.density
+        val sizePx = (72 * density).toInt().coerceAtLeast(192)
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        // Apple squircle continuous rounded corner curve
+        val cornerRadius = sizePx * 0.225f
+        val clipPath = Path().apply {
+            addRoundRect(
+                0f, 0f, sizePx.toFloat(), sizePx.toFloat(),
+                cornerRadius, cornerRadius,
+                Path.Direction.CW
+            )
+        }
+        canvas.clipPath(clipPath)
+
+        val bgDrawable = ResourcesCompat.getDrawable(
+            context.resources, appIcon.backgroundResId, context.theme
+        )
+        val fgDrawable = ResourcesCompat.getDrawable(
+            context.resources, appIcon.foregroundResId, context.theme
+        )
+
+        bgDrawable?.let {
+            it.setBounds(0, 0, sizePx, sizePx)
+            it.draw(canvas)
+        }
+        fgDrawable?.let {
+            it.setBounds(0, 0, sizePx, sizePx)
+            it.draw(canvas)
+        }
+
+        return bitmap
+    }
 }
+

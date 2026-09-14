@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -1080,6 +1081,7 @@ fun SettingsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -2377,6 +2379,26 @@ fun AppIconPreviewBadge(
                             listOf(Color(0xFF6C5CE7), Color(0xFFFD79A8), Color(0xFF74B9FF))
                         )
                     )
+                    AppIcon.SUNSET -> Modifier.background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(Color(0xFFFF5E3A), Color(0xFFFF2A68))
+                        )
+                    )
+                    AppIcon.EMERALD -> Modifier.background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(Color(0xFF34C759), Color(0xFF00A86B))
+                        )
+                    )
+                    AppIcon.PURPLE -> Modifier.background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(Color(0xFFAF52DE), Color(0xFF5856D6))
+                        )
+                    )
+                    AppIcon.GOLD -> Modifier.background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(Color(0xFF2A241B), Color(0xFF12100E))
+                        )
+                    )
                 }
             )
             .border(
@@ -2386,13 +2408,17 @@ fun AppIconPreviewBadge(
                     AppIcon.DARK -> Color(0x33FFFFFF)
                     AppIcon.NEON -> Color(0x4400F0FF)
                     AppIcon.GLASS -> Color(0x66FFFFFF)
+                    AppIcon.SUNSET -> Color(0x33FFFFFF)
+                    AppIcon.EMERALD -> Color(0x33FFFFFF)
+                    AppIcon.PURPLE -> Color(0x33FFFFFF)
+                    AppIcon.GOLD -> Color(0x55F6D365)
                 },
                 shape = shape
             ),
         contentAlignment = Alignment.Center
     ) {
         when (appIcon) {
-            AppIcon.CLASSIC -> {
+            AppIcon.CLASSIC, AppIcon.SUNSET, AppIcon.EMERALD, AppIcon.PURPLE -> {
                 Box(
                     modifier = Modifier
                         .size(26.dp)
@@ -2456,6 +2482,23 @@ fun AppIconPreviewBadge(
                         imageVector = Icons.Default.Check,
                         contentDescription = null,
                         tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            AppIcon.GOLD -> {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x22F6D365))
+                        .border(2.dp, Color(0xFFF6D365), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color(0xFFFFF8E7),
                         modifier = Modifier.size(16.dp)
                     )
                 }

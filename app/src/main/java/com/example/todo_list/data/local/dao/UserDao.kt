@@ -50,6 +50,9 @@ interface UserDao {
     @Query("SELECT COUNT(*) FROM users")
     suspend fun getUserCount(): Int
 
+    @Query("SELECT * FROM users ORDER BY lastLoginAt DESC, createdAt DESC LIMIT 1")
+    suspend fun getMostRecentUser(): UserEntity?
+
     @Query("""
         UPDATE users 
         SET lockType = :lockType,

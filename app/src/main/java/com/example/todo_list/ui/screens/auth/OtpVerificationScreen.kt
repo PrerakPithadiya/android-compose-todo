@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -45,9 +46,12 @@ fun OtpVerificationScreen(
     onOtpVerified: () -> Unit,
     onBackToPhone: () -> Unit,
     onResendRequested: (newOtp: String) -> Unit,
+    autofillCode: String? = null,
+    onAutofillConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
 
     var enteredOtp by remember { mutableStateOf("") }
@@ -55,7 +59,17 @@ fun OtpVerificationScreen(
     var errorMessage by remember { mutableStateOf("") }
     var isVerifying by remember { mutableStateOf(false) }
 
-    // Visible Countdown Timer for OTP Validity (60 Seconds)
+    // Automatically fill destination field when autofillCode is received
+    LaunchedEffect(autofillCode) {
+        if (!autofillCode.isNullOrEmpty()) {
+            enteredOtp = autofillCode.take(6)
+            isError = false
+            focusManager.clearFocus()
+            onAutofillConsumed()
+        }
+    }
+
+    // Visible Countdown Timer for OTP Validity (30 Seconds)
     var otpTimerKey by remember { mutableIntStateOf(0) }
     var otpRemainingSeconds by remember { mutableIntStateOf(AuthManager.OTP_VALIDITY_SECONDS) }
     var isOtpExpired by remember { mutableStateOf(false) }

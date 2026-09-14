@@ -46,6 +46,8 @@ fun ForgotPasswordSheet(
     onDismiss: () -> Unit,
     onPasswordResetComplete: () -> Unit,
     onOtpDispatched: (code: String) -> Unit,
+    autofillCode: String? = null,
+    onAutofillConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -62,6 +64,15 @@ fun ForgotPasswordSheet(
 
     var isNewPasswordVisible by remember { mutableStateOf(false) }
     var isOtpError by remember { mutableStateOf(false) }
+
+    LaunchedEffect(autofillCode, step) {
+        if (step == 1 && !autofillCode.isNullOrEmpty()) {
+            otpInput = autofillCode.take(6)
+            isOtpError = false
+            focusManager.clearFocus()
+            onAutofillConsumed()
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

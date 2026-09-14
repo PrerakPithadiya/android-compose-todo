@@ -37,6 +37,7 @@ fun AuthScreen(
 
     var pendingPhoneNumber by remember { mutableStateOf("") }
     var activeOtpCode by remember { mutableStateOf("") }
+    var autofillCode by remember { mutableStateOf<String?>(null) }
     var showOtpBanner by remember { mutableStateOf(false) }
 
     LaunchedEffect(AuthManager.isAccountCreated) {
@@ -67,7 +68,12 @@ fun AuthScreen(
                         },
                         onForgotPasswordOtpDispatched = { code ->
                             activeOtpCode = code
+                            autofillCode = null
                             showOtpBanner = true
+                        },
+                        autofillCode = autofillCode,
+                        onAutofillConsumed = {
+                            autofillCode = null
                         }
                     )
                 }
@@ -77,6 +83,7 @@ fun AuthScreen(
                         onCodeSent = { phone, otp ->
                             pendingPhoneNumber = phone
                             activeOtpCode = otp
+                            autofillCode = null
                             showOtpBanner = true
                             currentStep = AuthFlowStep.OTP_VERIFICATION
                         },
@@ -89,15 +96,21 @@ fun AuthScreen(
                 AuthFlowStep.OTP_VERIFICATION -> {
                     OtpVerificationScreen(
                         phoneNumber = pendingPhoneNumber,
+                        autofillCode = autofillCode,
+                        onAutofillConsumed = {
+                            autofillCode = null
+                        },
                         onOtpVerified = {
                             showOtpBanner = false
                             currentStep = AuthFlowStep.ACCOUNT_SETUP
                         },
                         onBackToPhone = {
+                            showOtpBanner = false
                             currentStep = AuthFlowStep.REGISTER_PHONE
                         },
                         onResendRequested = { newOtp ->
                             activeOtpCode = newOtp
+                            autofillCode = null
                             showOtpBanner = true
                         }
                     )
@@ -119,9 +132,8 @@ fun AuthScreen(
         IosNotificationBanner(
             visible = showOtpBanner,
             otpCode = activeOtpCode,
-            onAutofillClick = { autofillCode ->
-                // Banner autofill action
-                showOtpBanner = false
+            onAutofillClick = { code ->
+                autofillCode = code
             },
             onDismiss = {
                 showOtpBanner = false

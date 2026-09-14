@@ -7,6 +7,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.example.todo_list.MainActivity
+import com.example.todo_list.R
+import com.example.todo_list.manager.AppIconManager
 
 class TaskNotificationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -28,14 +30,16 @@ class TaskNotificationReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // System Blue Accent color matching iOS guidelines (#007AFF)
-        val systemBlueColor = 0xFF007AFF.toInt()
+        // Dynamically resolve the active AppIcon and synthesize its high-res squircle Bitmap
+        val activeIcon = AppIconManager.getActiveIcon(context)
+        val iconBitmap = AppIconManager.getIconBitmap(context, activeIcon)
 
         val notificationBuilder = NotificationCompat.Builder(context, TaskNotificationScheduler.CHANNEL_ID)
-            .setSmallIcon(context.applicationInfo.icon)
+            .setSmallIcon(R.drawable.ic_notification_check)
+            .setLargeIcon(iconBitmap)
             .setContentTitle(taskTitle)
             .setContentText("Reminder for your $taskCategory task at $taskTime")
-            .setColor(systemBlueColor)
+            .setColor(activeIcon.accentColorInt)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
