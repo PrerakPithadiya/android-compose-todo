@@ -6,11 +6,13 @@ TaskFlow is a modern, high-performance task management application for Android, 
 
 ## 📱 Key Features
 
-### 1. 🔐 Account Auto-Detection, Phone OTP Registration & Login
+### 1. 🔐 Account Auto-Detection, Phone OTP Registration & Multi-Account Switcher
 * **Automatic Account Detection**: Automatically detects whether an account exists on launch; dynamically routes first-time users to the **Phone Registration** workflow, logged-out users to the **Login Screen**, and authenticated users directly to their workspace.
+* **Multi-Account Profile Switcher**: Apple-styled multi-account selector allowing users to easily browse saved accounts on the device, view avatars and handles, unlock via password or 1-tap **Face ID / Biometrics**, and securely manage or remove inactive local profiles.
 * **6-Digit Phone OTP Verification & 30s Countdown**: Clean phone number input with international country code selection, automated 6-digit verification code dispatch, and an Apple-styled **Interactive Push Notification Banner** featuring a live 30-second countdown timer pill, automatic 30s code expiration/dismissal, and 1-tap autofill directly into the 6-digit destination input cells with automatic keyboard management.
 * **Account Setup & Password Security**: Streamlined profile initialization (Full Name, Username `@handle`, and 4-rule strict password validation checklist: 8+ chars, 1+ number, uppercase/symbol, match confirmation) with a 4-segment live strength meter and SHA-256 random salting.
 * **Login & Recovery**: Username/Phone and Password authentication with visibility toggles, biometric instant login shortcut, "Forgot Password" SMS OTP recovery flow, and intuitive Log Out controls in Settings & Profile.
+
 
 ### 2. 🎨 Apple (iOS HIG) Design System
 * **Authentic Styling**: Uses iOS system color tokens (`SystemBlue`, `SystemGroupedBackground`, `SystemSurface`) and divider styles.

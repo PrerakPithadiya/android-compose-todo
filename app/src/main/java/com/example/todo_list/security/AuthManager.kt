@@ -44,6 +44,9 @@ object AuthManager {
     var isLoggedIn by mutableStateOf(false)
         private set
 
+    var isAuthInitialized by mutableStateOf(false)
+        private set
+
     // Convenience getters for UI components
     val registeredPhone: String
         get() = currentUser?.phone ?: ""
@@ -71,6 +74,13 @@ object AuthManager {
     var otpExpiryTimestamp by mutableStateOf(0L)
         private set
 
+    private const val LEGACY_KEY_USERNAME = "key_user_username"
+    private const val LEGACY_KEY_PHONE = "key_user_phone"
+    private const val LEGACY_KEY_NAME = "key_user_name"
+    private const val LEGACY_KEY_EMAIL = "key_user_email"
+    private const val LEGACY_KEY_PASSWORD_HASH = "key_password_hash"
+    private const val LEGACY_KEY_PASSWORD_SALT = "key_password_salt"
+
     fun initialize(context: Context) {
         appContext = context.applicationContext
         val db = AppDatabase.getInstance(context.applicationContext)
@@ -81,13 +91,46 @@ object AuthManager {
         }
 
         CoroutineScope(Dispatchers.IO).launch {
-            val userCount = userDao?.getUserCount() ?: 0
+            var userCount = userDao?.getUserCount() ?: 0
             val explicitLogout = prefs?.getBoolean(KEY_EXPLICIT_LOGOUT, false) ?: false
             val savedUserId = prefs?.getString(KEY_ACTIVE_USER_ID, null)
 
             var resolvedUser: UserEntity? = null
             if (savedUserId != null) {
                 resolvedUser = userDao?.getUserById(savedUserId)
+            }
+
+            // Automatic legacy recovery: If no SQLite accounts exist, check if legacy
+            // SharedPreferences user credentials exist from prior versions and restore them.
+            if (userCount == 0) {
+                val legacyUser = prefs?.getString(LEGACY_KEY_USERNAME, null)
+                val legacyPhone = prefs?.getString(LEGACY_KEY_PHONE, null)
+                val legacyHash = prefs?.getString(LEGACY_KEY_PASSWORD_HASH, null)
+                val legacySalt = prefs?.getString(LEGACY_KEY_PASSWORD_SALT, null)
+                val legacyName = prefs?.getString(LEGACY_KEY_NAME, "User") ?: "User"
+                val legacyEmail = prefs?.getString(LEGACY_KEY_EMAIL, "") ?: ""
+
+                if (!legacyUser.isNullOrBlank() && !legacyHash.isNullOrBlank() && !legacySalt.isNullOrBlank()) {
+                    val recoveredId = UUID.randomUUID().toString()
+                    val recoveredUser = UserEntity(
+                        id = recoveredId,
+                        name = legacyName,
+                        username = if (legacyUser.startsWith("@")) legacyUser else "@$legacyUser",
+                        phone = legacyPhone ?: "",
+                        email = legacyEmail,
+                        passwordHash = legacyHash,
+                        passwordSalt = legacySalt,
+                        createdAt = System.currentTimeMillis(),
+                        lastLoginAt = System.currentTimeMillis()
+                    )
+                    userDao?.insertUser(recoveredUser)
+                    userCount = 1
+                    resolvedUser = recoveredUser
+                    prefs?.edit()
+                        ?.putString(KEY_ACTIVE_USER_ID, recoveredId)
+                        ?.putBoolean(KEY_EXPLICIT_LOGOUT, false)
+                        ?.commit()
+                }
             }
 
             // Automatic fallback: If no active user is saved (e.g. crash before prefs flush
@@ -116,6 +159,7 @@ object AuthManager {
                     currentUserId = null
                     currentUser = null
                 }
+                isAuthInitialized = true
             }
         }
     }
@@ -278,6 +322,83 @@ object AuthManager {
     }
 
     /**
+     * Retrieves all saved user accounts stored in the SQLite database.
+     */
+    suspend fun getSavedAccounts(): List<UserEntity> = withContext(Dispatchers.IO) {
+        userDao?.getAllUsers() ?: emptyList()
+    }
+
+    /**
+     * Signs in directly as a specific user after biometric authentication has succeeded.
+     */
+    suspend fun loginWithBiometrics(targetUser: UserEntity): Boolean = withContext(Dispatchers.IO) {
+        val dao = userDao ?: return@withContext false
+        val user = dao.getUserById(targetUser.id) ?: return@withContext false
+
+        dao.updateLastLogin(user.id)
+        prefs?.edit()
+            ?.putString(KEY_ACTIVE_USER_ID, user.id)
+            ?.putBoolean(KEY_EXPLICIT_LOGOUT, false)
+            ?.commit()
+
+        val updatedUser = user.copy(lastLoginAt = System.currentTimeMillis())
+        withContext(Dispatchers.Main) {
+            currentUser = updatedUser
+            currentUserId = updatedUser.id
+            isLoggedIn = true
+            isAccountCreated = true
+
+            UserProfileManager.loadUserProfile(updatedUser)
+            AppLockManager.loadUserLock(updatedUser)
+        }
+        true
+    }
+
+    /**
+     * Logs in as a specified user using their password.
+     */
+    suspend fun loginUserWithPassword(user: UserEntity, password: String): Boolean = withContext(Dispatchers.IO) {
+        val dao = userDao ?: return@withContext false
+        val inputHash = hashPassword(password, user.passwordSalt)
+        if (inputHash == user.passwordHash) {
+            dao.updateLastLogin(user.id)
+            prefs?.edit()
+                ?.putString(KEY_ACTIVE_USER_ID, user.id)
+                ?.putBoolean(KEY_EXPLICIT_LOGOUT, false)
+                ?.commit()
+
+            val updatedUser = user.copy(lastLoginAt = System.currentTimeMillis())
+            withContext(Dispatchers.Main) {
+                currentUser = updatedUser
+                currentUserId = updatedUser.id
+                isLoggedIn = true
+                isAccountCreated = true
+
+                UserProfileManager.loadUserProfile(updatedUser)
+                AppLockManager.loadUserLock(updatedUser)
+            }
+            return@withContext true
+        }
+        false
+    }
+
+    /**
+     * Removes an account from the local SQLite database.
+     */
+    suspend fun removeAccountLocally(userId: String): Boolean = withContext(Dispatchers.IO) {
+        val dao = userDao ?: return@withContext false
+        dao.deleteUserById(userId)
+        val remainingCount = dao.getUserCount()
+        withContext(Dispatchers.Main) {
+            isAccountCreated = remainingCount > 0
+            if (currentUserId == userId) {
+                logout()
+            }
+        }
+        true
+    }
+
+    /**
      * Log out current user session.
      */
     fun logout() {
@@ -308,6 +429,17 @@ object AuthManager {
         val dao = userDao ?: return@withContext false
         val cleanPhone = phone.trim()
         val user = dao.getUserByPhone(cleanPhone) ?: dao.getUserByIdentifier(cleanPhone)
+        user != null
+    }
+
+    /**
+     * Checks if a user exists by username or phone.
+     */
+    suspend fun userExists(identifier: String): Boolean = withContext(Dispatchers.IO) {
+        val dao = userDao ?: return@withContext false
+        val cleanId = identifier.trim()
+        if (cleanId.isEmpty()) return@withContext false
+        val user = dao.getUserByIdentifier(cleanId)
         user != null
     }
 

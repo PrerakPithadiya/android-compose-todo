@@ -3,23 +3,37 @@ package com.example.todo_list
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.todo_list.notification.TaskNotificationScheduler
 import com.example.todo_list.security.AppLockManager
+import com.example.todo_list.security.AuthManager
 import com.example.todo_list.ui.screens.HomeScreen
+import com.example.todo_list.ui.screens.auth.AuthScreen
 import com.example.todo_list.ui.screens.lock.AppLockAuthScreen
 import com.example.todo_list.ui.theme.AppAccentColor
+import com.example.todo_list.ui.theme.SystemBlue
+import com.example.todo_list.ui.theme.SystemGroupedBackground
 import com.example.todo_list.ui.theme.TaskFlowTheme
 
 class MainActivity : FragmentActivity() {
@@ -57,6 +71,7 @@ class MainActivity : FragmentActivity() {
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
                     AppLockManager.onAppBackgrounded()
+                    com.example.todo_list.manager.AppIconManager.onAppBackgrounded(this@MainActivity)
                 }
                 Lifecycle.Event.ON_START -> {
                     AppLockManager.onAppForegrounded()
@@ -79,14 +94,40 @@ class MainActivity : FragmentActivity() {
                 else -> isSystemInDarkTheme()
             }
 
+            val isAuthInitialized = com.example.todo_list.security.AuthManager.isAuthInitialized
             val isLoggedIn = com.example.todo_list.security.AuthManager.isLoggedIn
             val isAccountCreated = com.example.todo_list.security.AuthManager.isAccountCreated
 
             TaskFlowTheme(darkTheme = isDark, accentColor = selectedAccent) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    if (!isAccountCreated || !isLoggedIn) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(SystemGroupedBackground)
+                ) {
+                    if (!isAuthInitialized) {
+                        // Authentic Apple launch splash placeholder while SQLite accounts are loaded
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(76.dp)
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(SystemBlue)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.CheckCircle,
+                                    contentDescription = "TaskFlow",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(44.dp)
+                                )
+                            }
+                        }
+                    } else if (!isAccountCreated || !isLoggedIn) {
                         // Registration & Login Gatekeeper
-                        com.example.todo_list.ui.screens.auth.AuthScreen(
+                        AuthScreen(
                             onAuthComplete = {
                                 // User logged in or registered successfully
                             }

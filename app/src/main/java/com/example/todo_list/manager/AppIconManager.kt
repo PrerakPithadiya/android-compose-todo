@@ -154,9 +154,12 @@ object AppIconManager {
         // the active foreground process to rebuild manifest entry points.
     }
 
+    private var pendingDisableOldIcon: AppIcon? = null
+
     /**
      * Dynamically switches the application launcher icon via PackageManager.
-     * Uses PackageManager.DONT_KILL_APP to avoid killing the active application process.
+     * Enables the new alias immediately and defers disabling the old active alias
+     * until onAppBackgrounded() to prevent Android OS from killing the foreground process.
      */
     fun setAppIcon(context: Context, newIcon: AppIcon): Boolean {
         if (currentAppIcon == newIcon) return true
@@ -164,7 +167,7 @@ object AppIconManager {
         try {
             val pm = appContext.packageManager
 
-            // 1. Enable the target component first to guarantee at least one launcher entry exists
+            // 1. Enable the target component first to guarantee the new launcher entry exists
             val targetComponent = ComponentName(appContext.packageName, newIcon.aliasClassName)
             pm.setComponentEnabledSetting(
                 targetComponent,
@@ -172,9 +175,13 @@ object AppIconManager {
                 PackageManager.DONT_KILL_APP
             )
 
-            // 2. Disable all other activity aliases
+            // 2. Track previous active icon to disable cleanly when app is backgrounded
+            val oldIcon = currentAppIcon
+            pendingDisableOldIcon = oldIcon
+
+            // 3. Disable all other dormant aliases (excluding the old active one for now)
             AppIcon.entries.forEach { icon ->
-                if (icon != newIcon) {
+                if (icon != newIcon && icon != oldIcon) {
                     val comp = ComponentName(appContext.packageName, icon.aliasClassName)
                     pm.setComponentEnabledSetting(
                         comp,
@@ -184,7 +191,7 @@ object AppIconManager {
                 }
             }
 
-            // 3. Persist selection and update reactive state
+            // 4. Persist selection and update reactive state
             currentAppIcon = newIcon
             prefs?.edit()?.putString(KEY_SELECTED_ICON, newIcon.id)?.commit()
             return true
@@ -194,8 +201,32 @@ object AppIconManager {
         }
     }
 
+    /**
+     * Called when the application transitions to the background (ON_STOP).
+     * Cleans up previously active aliases safely without killing the foreground UI.
+     */
+    fun onAppBackgrounded(context: Context) {
+        val oldToDisable = pendingDisableOldIcon ?: return
+        val appContext = context.applicationContext
+        try {
+            val pm = appContext.packageManager
+            if (oldToDisable != currentAppIcon) {
+                val comp = ComponentName(appContext.packageName, oldToDisable.aliasClassName)
+                pm.setComponentEnabledSetting(
+                    comp,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+            }
+            pendingDisableOldIcon = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun detectActiveIconFromPackageManager(context: Context): AppIcon? {
         val pm = context.packageManager
+        // 1. Check for explicitly enabled alias
         for (icon in AppIcon.entries) {
             try {
                 val comp = ComponentName(context.packageName, icon.aliasClassName)
@@ -203,35 +234,19 @@ object AppIconManager {
                 if (state == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
                     return icon
                 }
-            } catch (e: Exception) {
-                // Ignore and proceed to next alias
-            }
+            } catch (_: Exception) {}
         }
-        return null
-    }
-
-    private fun syncComponentStates(context: Context, activeIcon: AppIcon) {
-        val pm = context.packageManager
-        AppIcon.entries.forEach { icon ->
-            val comp = ComponentName(context.packageName, icon.aliasClassName)
-            val expectedState = if (icon == activeIcon) {
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-            } else {
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            }
+        // 2. Check for default enabled alias (Classic)
+        for (icon in AppIcon.entries) {
             try {
-                val currentState = pm.getComponentEnabledSetting(comp)
-                if (currentState != expectedState) {
-                    pm.setComponentEnabledSetting(
-                        comp,
-                        expectedState,
-                        PackageManager.DONT_KILL_APP
-                    )
+                val comp = ComponentName(context.packageName, icon.aliasClassName)
+                val state = pm.getComponentEnabledSetting(comp)
+                if (state == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT && icon == AppIcon.CLASSIC) {
+                    return icon
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+            } catch (_: Exception) {}
         }
+        return AppIcon.CLASSIC
     }
 
     /**

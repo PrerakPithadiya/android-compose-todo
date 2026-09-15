@@ -682,6 +682,17 @@ fun SettingsScreen(
                             )
 
                             SettingsValueRow(
+                                icon = Icons.Outlined.Fingerprint,
+                                iconTint = AppleHealth,
+                                title = "Device Biometrics",
+                                value = "System Settings",
+                                onClick = {
+                                    BiometricAuthHelper.openEnrollmentSettings(context)
+                                },
+                                showDivider = true
+                            )
+
+                            SettingsValueRow(
                                 icon = Icons.Outlined.Password,
                                 iconTint = SystemBlue,
                                 title = "Change Lock",
@@ -709,6 +720,35 @@ fun SettingsScreen(
                                 onClick = { showLockTimeoutSheet = true },
                                 showDivider = false
                             )
+                        }
+                    }
+
+                    if (AppLockManager.isLockEnabled && AppLockManager.isBiometricEnabled) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = SystemSurface.copy(alpha = 0.6f),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.Top,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Info,
+                                    contentDescription = null,
+                                    tint = SystemBlue,
+                                    modifier = Modifier.size(18.dp).padding(top = 1.dp)
+                                )
+                                Text(
+                                    text = "Biometrics verify against fingerprints and Face ID registered in this device's Android Settings. If sharing this device, enroll additional fingers in System Settings, or protect your account with an App PIN.",
+                                    fontSize = 13.sp,
+                                    color = SystemLabelSecondary,
+                                    lineHeight = 18.sp
+                                )
+                            }
                         }
                     }
                 }

@@ -43,6 +43,8 @@ fun AuthScreen(
     LaunchedEffect(AuthManager.isAccountCreated) {
         if (AuthManager.isAccountCreated && currentStep == AuthFlowStep.REGISTER_PHONE && pendingPhoneNumber.isEmpty()) {
             currentStep = AuthFlowStep.LOGIN
+        } else if (!AuthManager.isAccountCreated && currentStep == AuthFlowStep.LOGIN) {
+            currentStep = AuthFlowStep.REGISTER_PHONE
         }
     }
 

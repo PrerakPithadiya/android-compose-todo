@@ -35,9 +35,98 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         private const val DATABASE_NAME = "taskflow_database.db"
 
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `users` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `username` TEXT NOT NULL,
+                        `phone` TEXT NOT NULL,
+                        `email` TEXT NOT NULL,
+                        `passwordHash` TEXT NOT NULL,
+                        `passwordSalt` TEXT NOT NULL,
+                        `lockType` TEXT NOT NULL,
+                        `lockHash` TEXT,
+                        `lockSalt` TEXT,
+                        `isLockEnabled` INTEGER NOT NULL,
+                        `isBiometricEnabled` INTEGER NOT NULL,
+                        `lockTimeoutMs` INTEGER NOT NULL,
+                        `avatarPresetId` INTEGER NOT NULL,
+                        `customAvatarUri` TEXT,
+                        `bio` TEXT NOT NULL,
+                        `focusStatus` TEXT NOT NULL,
+                        `userTier` TEXT NOT NULL,
+                        `memberSince` TEXT NOT NULL,
+                        `dailyTaskGoal` INTEGER NOT NULL,
+                        `morningDigestTime` TEXT NOT NULL,
+                        `autoCloudSync` INTEGER NOT NULL,
+                        `xpPoints` INTEGER NOT NULL,
+                        `currentStreak` INTEGER NOT NULL,
+                        `bestStreak` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `lastLoginAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_users_username` ON `users` (`username`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_users_phone` ON `users` (`phone`)")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `userId` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `createdAt` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tasks_userId` ON `tasks` (`userId`)")
+            }
+        }
+
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE tasks ADD COLUMN priority TEXT NOT NULL DEFAULT 'NONE'")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `priority` TEXT NOT NULL DEFAULT 'NONE'")
+            }
+        }
+
+        val MIGRATION_1_3 = object : Migration(1, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `users` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `username` TEXT NOT NULL,
+                        `phone` TEXT NOT NULL,
+                        `email` TEXT NOT NULL,
+                        `passwordHash` TEXT NOT NULL,
+                        `passwordSalt` TEXT NOT NULL,
+                        `lockType` TEXT NOT NULL,
+                        `lockHash` TEXT,
+                        `lockSalt` TEXT,
+                        `isLockEnabled` INTEGER NOT NULL,
+                        `isBiometricEnabled` INTEGER NOT NULL,
+                        `lockTimeoutMs` INTEGER NOT NULL,
+                        `avatarPresetId` INTEGER NOT NULL,
+                        `customAvatarUri` TEXT,
+                        `bio` TEXT NOT NULL,
+                        `focusStatus` TEXT NOT NULL,
+                        `userTier` TEXT NOT NULL,
+                        `memberSince` TEXT NOT NULL,
+                        `dailyTaskGoal` INTEGER NOT NULL,
+                        `morningDigestTime` TEXT NOT NULL,
+                        `autoCloudSync` INTEGER NOT NULL,
+                        `xpPoints` INTEGER NOT NULL,
+                        `currentStreak` INTEGER NOT NULL,
+                        `bestStreak` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `lastLoginAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_users_username` ON `users` (`username`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_users_phone` ON `users` (`phone`)")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `userId` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `priority` TEXT NOT NULL DEFAULT 'NONE'")
+                db.execSQL("ALTER TABLE `tasks` ADD COLUMN `createdAt` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tasks_userId` ON `tasks` (`userId`)")
             }
         }
 
@@ -56,7 +145,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 DATABASE_NAME
             )
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_1_3)
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
@@ -69,7 +158,6 @@ abstract class AppDatabase : RoomDatabase() {
                         }
                     }
                 })
-                .fallbackToDestructiveMigration(true)
                 .build()
         }
 

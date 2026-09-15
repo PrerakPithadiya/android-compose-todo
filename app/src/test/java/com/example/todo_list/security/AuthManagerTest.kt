@@ -55,4 +55,12 @@ class AuthManagerTest {
         assertEquals(expectedExpiry, AuthManager.otpExpiryTimestamp)
         assertFalse(AuthManager.isOtpExpired())
     }
+
+    @Test
+    fun testLogoutClearsSessionState() {
+        AuthManager.logout()
+        assertFalse(AuthManager.isLoggedIn)
+        assertEquals(null, AuthManager.currentUserId)
+        assertEquals(null, AuthManager.currentUser)
+    }
 }
