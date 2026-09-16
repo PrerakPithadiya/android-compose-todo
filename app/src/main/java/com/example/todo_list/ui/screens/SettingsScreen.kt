@@ -1220,6 +1220,73 @@ fun SettingsScreen(
                         }
                     }
                 }
+
+                val isSamsung = remember {
+                    android.os.Build.MANUFACTURER.contains("samsung", ignoreCase = true)
+                }
+                if (isSamsung) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = SystemGroupedBackground,
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Info,
+                                    contentDescription = null,
+                                    tint = SystemBlue,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "Samsung One UI Tip",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SystemLabelPrimary
+                                )
+                            }
+                            Text(
+                                text = "To ensure notifications display your active custom icon on Samsung Galaxy devices, turn off 'Show app icon in notifications' in device settings.",
+                                fontSize = 12.sp,
+                                color = SystemLabelSecondary,
+                                lineHeight = 16.sp
+                            )
+                            TextButton(
+                                onClick = {
+                                    try {
+                                        val intent = android.content.Intent("android.settings.NOTIFICATION_SETTINGS").apply {
+                                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (_: Exception) {
+                                        try {
+                                            val intent = android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                                putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                            }
+                                            context.startActivity(intent)
+                                        } catch (_: Exception) {}
+                                    }
+                                },
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text(
+                                    text = "Open Notification Settings →",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = SystemBlue
+                                )
+                            }
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }

@@ -21,8 +21,13 @@ class TaskNotificationReceiver : BroadcastReceiver() {
         // Dynamically resolve the active AppIcon
         val activeIcon = AppIconManager.getActiveIcon(context)
 
-        // Launch MainActivity directly with clear task flags
-        val clickIntent = Intent(context, com.example.todo_list.MainActivity::class.java).apply {
+        TaskNotificationScheduler.createNotificationChannel(context)
+
+        // Launch the active activity alias with launcher flags
+        val clickIntent = Intent().apply {
+            component = ComponentName(context.packageName, activeIcon.aliasClassName)
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
@@ -32,7 +37,7 @@ class TaskNotificationReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notificationBuilder = NotificationCompat.Builder(context, TaskNotificationScheduler.CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, TaskNotificationScheduler.CHANNEL_ID)
             .setSmallIcon(activeIcon.iconResId)
             .setContentTitle(taskTitle)
             .setContentText("Reminder for your $taskCategory task at $taskTime")
@@ -41,10 +46,8 @@ class TaskNotificationReceiver : BroadcastReceiver() {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
+            .build()
 
-        // NOTE: setLargeIcon is deliberately NOT called so that only one icon
-        // appears in the notification, situated on the left in the main position.
-
-        notificationManager.notify(taskId.hashCode(), notificationBuilder.build())
+        notificationManager.notify(taskId.hashCode(), notification)
     }
 }

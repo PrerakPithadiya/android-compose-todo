@@ -99,12 +99,16 @@ TaskFlow is a modern, high-performance task management application for Android, 
 * **Grounded Conversational Schedule Assistant ("Ask AI")**:
   * Interactive Apple iOS chat sheet allowing natural language queries: "What should I focus on next?", "Do I have any schedule conflicts?", "How close am I to my daily goal?".
   * Instant quick-action prompt chips for frictionless 1-tap questions.
+* **Natural Language Schedule Parsing & Smart Task Input (`TaskScheduleParser`)**:
+  * On-the-fly offline natural language parser detecting dates (*"today"*, *"tomorrow"*, *"next monday"*), times (*"5pm"*, *"9:30 am"*), priority keywords (*"urgent"*, *"high priority"*), and tags (*"#work"*).
+  * Live Apple Intelligence suggestion badge pill in `CreateTaskBottomSheet.kt` and `EditTaskBottomSheet.kt` with 1-tap auto-population into date/time pickers and priority chips.
 * **Apple (iOS HIG) UI/UX Integration**:
   * Top Navigation Bar glowing sparkle action (`✦`) with Apple Intelligence gradient.
   * Home Screen "TaskFlow Intelligence" insight bento card with real-time pending task counter.
   * Authentic Apple modal bottom sheet (`28dp` radius) with 3 segmented tabs: *Schedule Plan*, *Priorities*, and *Ask AI*.
-  * Apple-styled priority pill badges on task cards across Home and Calendar screens.
+  * Modular `CreateTaskBottomSheet` and `EditTaskBottomSheet` components with inline priority chips, time pickers, and category selectors.
   * Dedicated "Apple Intelligence & LLM" section in Settings with API key management, live connection test diagnostics, and model selection.
+
 
 ---
 

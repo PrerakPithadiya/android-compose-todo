@@ -193,7 +193,8 @@ object AppIconManager {
 
             // 4. Persist selection and update reactive state
             currentAppIcon = newIcon
-            prefs?.edit()?.putString(KEY_SELECTED_ICON, newIcon.id)?.commit()
+            val sp = prefs ?: appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).also { prefs = it }
+            sp.edit().putString(KEY_SELECTED_ICON, newIcon.id).commit()
             return true
         } catch (e: Exception) {
             e.printStackTrace()
@@ -255,13 +256,16 @@ object AppIconManager {
      */
     fun getActiveIcon(context: Context): AppIcon {
         val appContext = context.applicationContext
-        val sp = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val sp = prefs ?: appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).also { prefs = it }
         val savedId = sp.getString(KEY_SELECTED_ICON, null)
-        return if (savedId != null) {
-            AppIcon.fromId(savedId)
-        } else {
-            currentAppIcon
+        if (savedId != null) {
+            return AppIcon.fromId(savedId)
         }
+        val detected = detectActiveIconFromPackageManager(appContext)
+        if (detected != null) {
+            return detected
+        }
+        return currentAppIcon
     }
 
     /**
