@@ -54,12 +54,14 @@ interface UserDao {
     suspend fun getMostRecentUser(): UserEntity?
 
     @Query("""
-        UPDATE users 
+        UPDATE users
         SET lockType = :lockType,
             lockHash = :lockHash,
             lockSalt = :lockSalt,
             isLockEnabled = :isLockEnabled,
             isBiometricEnabled = :isBiometricEnabled,
+            isFaceAuthEnabled = :isFaceAuthEnabled,
+            isFingerprintAuthEnabled = :isFingerprintAuthEnabled,
             lockTimeoutMs = :lockTimeoutMs
         WHERE id = :userId
     """)
@@ -70,6 +72,8 @@ interface UserDao {
         lockSalt: String?,
         isLockEnabled: Boolean,
         isBiometricEnabled: Boolean,
+        isFaceAuthEnabled: Boolean,
+        isFingerprintAuthEnabled: Boolean,
         lockTimeoutMs: Long
     )
 

@@ -1,10 +1,6 @@
 package com.example.todo_list.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,13 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.AccessTime
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.Category
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Flag
-import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -49,6 +40,10 @@ import com.example.todo_list.manager.TimePreferencesManager
 import com.example.todo_list.model.TaskItem
 import com.example.todo_list.model.TaskListCategory
 import com.example.todo_list.model.TaskPriority
+import com.example.todo_list.ui.components.primitives.TFButton
+import com.example.todo_list.ui.components.primitives.TFButtonType
+import com.example.todo_list.ui.components.primitives.TFCardGroup
+import com.example.todo_list.ui.components.primitives.TFGroupDivider
 import com.example.todo_list.ui.theme.*
 import com.example.todo_list.utils.HapticManager
 import com.example.todo_list.utils.HapticType
@@ -60,16 +55,29 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Next-Level Apple (iOS HIG) Create Task Bottom Sheet.
- * Features:
- * - Authentic iOS navigation bar (Cancel / New Task / Add)
- * - Automatic keyboard focus upon presentation
- * - Seamless inset grouped form cards (Title & Notes)
- * - Offline Apple Intelligence natural language schedule detection & suggestion pill
- * - Smooth inline expandable date & time pickers (no disruptive dialogs)
- * - Sleek iOS-style segmented priority control & category carousel
- * - Quick floating keyboard accessory shortcuts
- * - Physical Apple haptic feedback on all interactions
+ * Panels that can expand inline in Quick Capture mode (Stage 1).
+ */
+private enum class QuickPanelType {
+    NONE,
+    DATE_TIME,
+    PRIORITY,
+    CATEGORY,
+    NOTES,
+    AI_SUGGESTION
+}
+
+/**
+ * Progressive-Disclosure Create Task Bottom Sheet (Apple iOS HIG Specification).
+ * Reference: TASKFLOW_DESIGN_SYSTEM.md Section 11.2
+ *
+ * Architecture:
+ * - Stage 1 (Quick Capture): Compact half-sheet, automatic keyboard focus, live natural language
+ *   schedule token extraction with removable chips, inline expanding panels (Date, Time, Priority,
+ *   Category, Notes, AI), and quick toolbar docked right above keyboard.
+ * - Stage 2 (Details): Expands on drag-up or "Details" action to full inset grouped form
+ *   (Title + Notes, Date & Time pickers, Priority segmented control, Category carousel).
+ * - Safe Dismissal: Intercepts unsaved changes with an iOS HIG discard confirmation sheet.
+ * - Design Tokens: Full compliance with TFTheme colors, typography, shapes, and motion springs.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,8 +89,15 @@ fun CreateTaskBottomSheet(
     onTaskCreated: (TaskItem) -> Unit
 ) {
     val context = LocalContext.current
+    val colors = TFTheme.colors
+    val typography = TFTheme.typography
+    val accentRoles = LocalAccentRoles.current
     val is24Hour = TimePreferencesManager.is24HourFormat
     val currentEpochDay = remember { System.currentTimeMillis() / (1000 * 60 * 60 * 24) }
+
+    // Progressive Disclosure Mode: Stage 1 (Quick Capture) vs Stage 2 (Details)
+    var isExpandedToDetails by remember { mutableStateOf(false) }
+    var activeQuickPanel by remember { mutableStateOf(QuickPanelType.NONE) }
 
     // Input States
     var taskTitle by remember { mutableStateOf("") }
@@ -96,14 +111,15 @@ fun CreateTaskBottomSheet(
     var selectedPriority by remember { mutableStateOf("NONE") }
     var titleError by remember { mutableStateOf(false) }
 
-    // Inline Pickers Visibility
+    // Inline Pickers Visibility in Stage 2 Details
     var showInlineDatePicker by remember { mutableStateOf(false) }
     var showInlineTimePicker by remember { mutableStateOf(false) }
     var showCreateCategorySheet by remember { mutableStateOf(false) }
+    var showDiscardConfirmation by remember { mutableStateOf(false) }
 
     // Focus & Scroll
     val focusRequester = remember { FocusRequester() }
-    val scrollState = rememberScrollState()
+    val detailsScrollState = rememberScrollState()
 
     // Real-time Natural Language Schedule Detection
     val parsedSchedule = remember(taskTitle, is24Hour) {
@@ -124,14 +140,14 @@ fun CreateTaskBottomSheet(
         if (parsedSchedule.cleanedTitle.isNotBlank() && parsedSchedule.cleanedTitle != taskTitle) {
             taskTitle = parsedSchedule.cleanedTitle
         }
+        activeQuickPanel = QuickPanelType.NONE
     }
 
-    // DatePicker state for inline calendar
+    // DatePicker state for calendar
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = System.currentTimeMillis()
     )
 
-    // Sync inline datepicker changes
     LaunchedEffect(datePickerState.selectedDateMillis) {
         datePickerState.selectedDateMillis?.let { millis ->
             val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
@@ -148,7 +164,7 @@ fun CreateTaskBottomSheet(
         }
     }
 
-    // TimePicker state for inline clock
+    // TimePicker state for clock
     val (parsedHour, parsedMinute) = remember(selectedTime) {
         TimeFormatHelper.parseHourMinute(selectedTime)
     }
@@ -167,7 +183,7 @@ fun CreateTaskBottomSheet(
         selectedTime = formattedTime
     }
 
-    // Auto-focus keyboard on launch
+    // Auto-focus keyboard on quick capture launch
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(180)
         try {
@@ -175,8 +191,8 @@ fun CreateTaskBottomSheet(
         } catch (_: Exception) {}
     }
 
-    // Submit Action Helper
     val canSubmit = taskTitle.isNotBlank()
+
     val submitTask = {
         if (taskTitle.isBlank()) {
             titleError = true
@@ -204,6 +220,14 @@ fun CreateTaskBottomSheet(
         }
     }
 
+    val handleDismissAttempt = {
+        if (taskTitle.isNotBlank() || taskNotes.isNotBlank()) {
+            showDiscardConfirmation = true
+        } else {
+            onDismiss()
+        }
+    }
+
     if (showCreateCategorySheet) {
         CreateCategoryBottomSheet(
             onDismiss = { showCreateCategorySheet = false },
@@ -215,11 +239,60 @@ fun CreateTaskBottomSheet(
         )
     }
 
+    // Discard Changes Confirmation Action Sheet (Section 11.2)
+    if (showDiscardConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirmation = false },
+            title = {
+                Text(
+                    text = "Discard Unsaved Task?",
+                    style = typography.headline,
+                    color = colors.labelPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "If you discard now, any details entered will be permanently lost.",
+                    style = typography.subheadline,
+                    color = colors.labelSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardConfirmation = false
+                        onDismiss()
+                    }
+                ) {
+                    Text(
+                        text = "Discard",
+                        style = typography.headline,
+                        color = colors.red,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirmation = false }) {
+                    Text(
+                        text = "Keep Editing",
+                        style = typography.body,
+                        color = accentRoles.accentText
+                    )
+                }
+            },
+            containerColor = colors.cardRaised,
+            shape = TFShape.button
+        )
+    }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = SystemGroupedBackground,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        onDismissRequest = { handleDismissAttempt() },
+        sheetState = sheetState,
+        containerColor = colors.canvas,
+        shape = TFShape.sheet,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -227,7 +300,7 @@ fun CreateTaskBottomSheet(
                     .width(36.dp)
                     .height(5.dp)
                     .clip(CircleShape)
-                    .background(SystemGray2.copy(alpha = 0.4f))
+                    .background(colors.labelTertiary)
             )
         }
     ) {
@@ -236,35 +309,70 @@ fun CreateTaskBottomSheet(
                 .fillMaxWidth()
                 .imePadding()
         ) {
-            // 1. Authentic Apple Navigation Bar Header
+            // Navigation Bar Header (Cancel | New Task / Details | Add)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .height(44.dp)
+                    .padding(horizontal = TFSpace.lg),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(
                     onClick = {
                         HapticManager.perform(context, HapticType.CLICK)
-                        onDismiss()
+                        handleDismissAttempt()
                     },
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = "Cancel",
-                        fontSize = 17.sp,
-                        color = SystemBlue,
-                        fontWeight = FontWeight.Normal
+                        style = typography.body,
+                        color = accentRoles.accentText
                     )
                 }
 
-                Text(
-                    text = "New Task",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SystemLabelPrimary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = if (isExpandedToDetails) "Task Details" else "New Task",
+                        style = typography.headline,
+                        color = colors.labelPrimary
+                    )
+
+                    // Toggle button between Quick Capture & Details
+                    Surface(
+                        shape = TFShape.pill,
+                        color = colors.fillControl,
+                        modifier = Modifier
+                            .clip(TFShape.pill)
+                            .clickable {
+                                HapticManager.perform(context, HapticType.CLICK)
+                                isExpandedToDetails = !isExpandedToDetails
+                                activeQuickPanel = QuickPanelType.NONE
+                            }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = if (isExpandedToDetails) "Quick" else "Details",
+                                style = typography.caption,
+                                fontWeight = FontWeight.SemiBold,
+                                color = accentRoles.accentText
+                            )
+                            Icon(
+                                imageVector = if (isExpandedToDetails) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
+                                contentDescription = "Toggle mode",
+                                tint = accentRoles.accentText,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+                }
 
                 TextButton(
                     onClick = { submitTask() },
@@ -273,42 +381,54 @@ fun CreateTaskBottomSheet(
                 ) {
                     Text(
                         text = "Add",
-                        fontSize = 17.sp,
+                        style = typography.headline,
                         fontWeight = FontWeight.Bold,
-                        color = if (canSubmit) SystemBlue else SystemBlue.copy(alpha = 0.35f)
+                        color = if (canSubmit) accentRoles.accentText else accentRoles.accentText.copy(alpha = 0.35f)
                     )
                 }
             }
 
-            // Scrollable Content
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // 2. Apple Inset Grouped Card: Title & Notes
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SystemSurface,
-                    border = BorderStroke(0.5.dp, if (titleError) SystemRed else SystemDivider),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        // Title Input Field
+            HorizontalDivider(thickness = hairline(), color = colors.separator)
+
+            // Content Area: Switch between Stage 1 (Quick Capture) and Stage 2 (Details)
+            AnimatedContent(
+                targetState = isExpandedToDetails,
+                transitionSpec = {
+                    fadeIn(animationSpec = TFMotion.standard()) togetherWith
+                            fadeOut(animationSpec = TFMotion.standard())
+                },
+                label = "CreateTaskStageTransition"
+            ) { inDetailsMode ->
+                if (!inDetailsMode) {
+                    // ──────────────────────────────────────────────
+                    // STAGE 1: QUICK CAPTURE (Section 11.2)
+                    // ──────────────────────────────────────────────
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = TFSpace.lg, vertical = TFSpace.md),
+                        verticalArrangement = Arrangement.spacedBy(TFSpace.md)
+                    ) {
+                        // Title Input Field (20sp title3, auto-grow to 3 lines)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp)
+                                .clip(TFShape.card)
+                                .background(colors.card)
+                                .then(
+                                    if (colors.isDark) {
+                                        Modifier.border(hairline(), if (titleError) colors.red else colors.cardStroke, TFShape.card)
+                                    } else {
+                                        if (titleError) Modifier.border(hairline(), colors.red, TFShape.card) else Modifier
+                                    }
+                                )
+                                .padding(horizontal = TFSpace.lg, vertical = TFSpace.md)
                         ) {
                             if (taskTitle.isEmpty()) {
                                 Text(
-                                    text = "What needs to be done?",
-                                    fontSize = 17.sp,
-                                    color = SystemLabelSecondary.copy(alpha = 0.5f),
-                                    fontWeight = FontWeight.Medium
+                                    text = "What needs doing?",
+                                    style = typography.title3,
+                                    color = colors.labelSecondary.copy(alpha = 0.5f)
                                 )
                             }
                             BasicTextField(
@@ -318,12 +438,13 @@ fun CreateTaskBottomSheet(
                                     if (it.isNotBlank()) titleError = false
                                 },
                                 textStyle = TextStyle(
-                                    fontSize = 17.sp,
+                                    fontSize = 20.sp,
+                                    lineHeight = 25.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = SystemLabelPrimary
+                                    color = colors.labelPrimary
                                 ),
-                                cursorBrush = SolidColor(SystemBlue),
-                                singleLine = true,
+                                cursorBrush = SolidColor(accentRoles.accentText),
+                                maxLines = 3,
                                 keyboardOptions = KeyboardOptions(
                                     capitalization = KeyboardCapitalization.Sentences,
                                     imeAction = ImeAction.Done
@@ -337,515 +458,583 @@ fun CreateTaskBottomSheet(
                             )
                         }
 
-                        // Inset Hairline Divider
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 16.dp),
-                            thickness = 0.5.dp,
-                            color = SystemDivider
-                        )
-
-                        // Notes Input Field
-                        Box(
+                        // NLP Schedule Recognized Chips (Removable)
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(TFSpace.sm),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (taskNotes.isEmpty()) {
-                                Text(
-                                    text = "Notes or details...",
-                                    fontSize = 15.sp,
-                                    color = SystemLabelSecondary.copy(alpha = 0.45f)
+                            // Date token chip
+                            QuickRemovableChip(
+                                icon = Icons.Outlined.CalendarMonth,
+                                text = selectedDate,
+                                isHighlighted = selectedDate != "Today",
+                                onRemove = {
+                                    selectedDate = "Today"
+                                    selectedEpochDay = currentEpochDay
+                                }
+                            )
+
+                            // Time token chip
+                            QuickRemovableChip(
+                                icon = Icons.Outlined.Schedule,
+                                text = selectedTime,
+                                isHighlighted = true,
+                                onRemove = {
+                                    selectedTime = if (is24Hour) "17:00" else "05:00 PM"
+                                }
+                            )
+
+                            // Priority token chip
+                            if (selectedPriority != "NONE") {
+                                val prioGlyph = when (selectedPriority) {
+                                    "LOW" -> "! Low"
+                                    "MEDIUM" -> "!! Med"
+                                    "HIGH" -> "!!! High"
+                                    else -> ""
+                                }
+                                QuickRemovableChip(
+                                    icon = Icons.Outlined.Flag,
+                                    text = prioGlyph,
+                                    isHighlighted = true,
+                                    onRemove = { selectedPriority = "NONE" }
                                 )
                             }
-                            BasicTextField(
-                                value = taskNotes,
-                                onValueChange = { taskNotes = it },
-                                textStyle = TextStyle(
-                                    fontSize = 15.sp,
-                                    color = SystemLabelPrimary
-                                ),
-                                cursorBrush = SolidColor(SystemBlue),
-                                maxLines = 4,
-                                keyboardOptions = KeyboardOptions(
-                                    capitalization = KeyboardCapitalization.Sentences
-                                ),
-                                modifier = Modifier.fillMaxWidth()
+
+                            // Category token chip
+                            QuickRemovableChip(
+                                icon = Icons.Outlined.Category,
+                                text = selectedCategory,
+                                isHighlighted = selectedCategory != initialCategory,
+                                onRemove = { selectedCategory = initialCategory }
                             )
                         }
-                    }
-                }
 
-                // 3. Apple Intelligence Smart Suggestion Pill
-                AnimatedVisibility(
-                    visible = parsedSchedule.hasSuggestions,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = SystemBlueLight.copy(alpha = 0.6f),
-                        border = BorderStroke(1.dp, SystemBlue.copy(alpha = 0.25f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { applySuggestion() }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoAwesome,
-                                    contentDescription = "Smart Schedule",
-                                    tint = SystemBlue,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Column {
-                                    Text(
-                                        text = "Suggestion: ${parsedSchedule.getSummaryPillText()}",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = SystemBlueDark
-                                    )
-                                    Text(
-                                        text = "Tap to auto-apply date, time & priority",
-                                        fontSize = 11.sp,
-                                        color = SystemLabelSecondary
-                                    )
-                                }
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .padding(start = 8.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(SystemBlue)
-                                    .clickable { applySuggestion() }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "Apply",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 4. Inset Grouped Card: Schedule (Date & Time)
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SystemSurface,
-                    border = BorderStroke(0.5.dp, SystemDivider),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        // Date Header Row
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    HapticManager.perform(context, HapticType.CLICK)
-                                    showInlineDatePicker = !showInlineDatePicker
-                                }
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(SystemBlue.copy(alpha = 0.12f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.CalendarMonth,
-                                        contentDescription = "Date",
-                                        tint = SystemBlue,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Text(
-                                    text = "Date",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = SystemLabelPrimary
-                                )
-                            }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = SystemBlueLight
-                                ) {
-                                    Text(
-                                        text = selectedDate,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = SystemBlue,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                    )
-                                }
-                                Icon(
-                                    imageVector = if (showInlineDatePicker) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                                    contentDescription = null,
-                                    tint = SystemGray,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-
-                        // Quick Date Pills
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            listOf(
-                                "Today" to currentEpochDay,
-                                "Tomorrow" to currentEpochDay + 1
-                            ).forEach { (label, epoch) ->
-                                val isSelected = selectedDate == label
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = if (isSelected) SystemBlue else SystemGroupedBackground,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .clickable {
-                                            HapticManager.perform(context, HapticType.CLICK)
-                                            selectedDate = label
-                                            selectedEpochDay = epoch
-                                            showInlineDatePicker = false
-                                        }
-                                ) {
-                                    Text(
-                                        text = label,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) Color.White else SystemLabelPrimary,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    )
-                                }
-                            }
-
-                            // Weekend preset
-                            val isWeekendSelected = selectedDate != "Today" && selectedDate != "Tomorrow" && !showInlineDatePicker
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = if (isWeekendSelected) SystemBlue else SystemGroupedBackground,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .clickable {
-                                        HapticManager.perform(context, HapticType.CLICK)
-                                        val cal = Calendar.getInstance()
-                                        val daysUntilSat = (Calendar.SATURDAY - cal.get(Calendar.DAY_OF_WEEK) + 7) % 7
-                                        val targetDays = if (daysUntilSat == 0) 7 else daysUntilSat
-                                        cal.add(Calendar.DAY_OF_YEAR, targetDays)
-                                        val fmt = SimpleDateFormat("MMM dd", Locale.getDefault())
-                                        selectedDate = "Weekend (${fmt.format(cal.time)})"
-                                        selectedEpochDay = cal.timeInMillis / (1000 * 60 * 60 * 24)
-                                        showInlineDatePicker = false
-                                    }
-                            ) {
-                                Text(
-                                    text = "Weekend 🌅",
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isWeekendSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isWeekendSelected) Color.White else SystemLabelPrimary,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-
-                        // Inline Calendar Accordion
-                        AnimatedVisibility(
-                            visible = showInlineDatePicker,
-                            enter = fadeIn() + expandVertically(),
-                            exit = fadeOut() + shrinkVertically()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp)
-                            ) {
-                                DatePicker(
-                                    state = datePickerState,
-                                    showModeToggle = false,
-                                    colors = DatePickerDefaults.colors(
-                                        selectedDayContainerColor = SystemBlue,
-                                        todayDateBorderColor = SystemBlue
-                                    )
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Inset Hairline Divider
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 16.dp),
-                            thickness = 0.5.dp,
-                            color = SystemDivider
-                        )
-
-                        // Time Header Row
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    HapticManager.perform(context, HapticType.CLICK)
-                                    showInlineTimePicker = !showInlineTimePicker
-                                }
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFFFF9500).copy(alpha = 0.12f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Schedule,
-                                        contentDescription = "Time",
-                                        tint = Color(0xFFFF9500),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Text(
-                                    text = "Time",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = SystemLabelPrimary
-                                )
-                            }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = SystemBlueLight
-                                ) {
-                                    Text(
-                                        text = selectedTime,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = SystemBlue,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                    )
-                                }
-                                Icon(
-                                    imageVector = if (showInlineTimePicker) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                                    contentDescription = null,
-                                    tint = SystemGray,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-
-                        // Quick Time Chips
-                        val quickTimes = remember(is24Hour) { TimeFormatHelper.getQuickTimes(is24Hour) }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            quickTimes.forEach { qTime ->
-                                val isSelected = selectedTime == qTime && !showInlineTimePicker
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = if (isSelected) SystemBlue else SystemGroupedBackground,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .clickable {
-                                            HapticManager.perform(context, HapticType.CLICK)
-                                            selectedTime = qTime
-                                            showInlineTimePicker = false
-                                        }
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.AccessTime,
-                                            contentDescription = null,
-                                            tint = if (isSelected) Color.White else SystemLabelSecondary,
-                                            modifier = Modifier.size(12.dp)
-                                        )
-                                        Text(
-                                            text = qTime,
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isSelected) Color.White else SystemLabelPrimary
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Inline Clock Selector Accordion
-                        AnimatedVisibility(
-                            visible = showInlineTimePicker,
-                            enter = fadeIn() + expandVertically(),
-                            exit = fadeOut() + shrinkVertically()
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 12.dp)
-                            ) {
-                                TimePicker(
-                                    state = timePickerState,
-                                    colors = TimePickerDefaults.colors(
-                                        clockDialColor = SystemGroupedBackground,
-                                        clockDialSelectedContentColor = Color.White,
-                                        clockDialUnselectedContentColor = SystemLabelPrimary,
-                                        selectorColor = SystemBlue,
-                                        periodSelectorSelectedContainerColor = SystemBlueLight,
-                                        periodSelectorSelectedContentColor = SystemBlue
-                                    )
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                }
-
-                // 5. Inset Grouped Card: Priority & Category
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SystemSurface,
-                    border = BorderStroke(0.5.dp, SystemDivider),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        // Priority Row
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(SystemRed.copy(alpha = 0.12f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Flag,
-                                        contentDescription = "Priority",
-                                        tint = SystemRed,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Text(
-                                    text = "Priority",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = SystemLabelPrimary
-                                )
-                            }
-
-                            // iOS-style 4-Segmented Control
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(SystemGroupedBackground)
-                                    .padding(2.dp),
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                listOf(
-                                    TaskPriority.NONE to "None",
-                                    TaskPriority.LOW to "! Low",
-                                    TaskPriority.MEDIUM to "!! Med",
-                                    TaskPriority.HIGH to "!!! High"
-                                ).forEach { (prio, label) ->
-                                    val isSelected = selectedPriority == prio.key
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(
-                                                if (isSelected) {
-                                                    if (prio == TaskPriority.NONE) SystemSurface else Color(prio.badgeBgHex)
-                                                } else Color.Transparent
-                                            )
-                                            .clickable {
-                                                HapticManager.perform(context, HapticType.CLICK)
-                                                selectedPriority = prio.key
-                                            }
-                                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = label,
-                                            fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) {
-                                                if (prio == TaskPriority.NONE) SystemLabelPrimary else Color(prio.colorHex)
-                                            } else SystemLabelSecondary
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Inset Hairline Divider
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 16.dp),
-                            thickness = 0.5.dp,
-                            color = SystemDivider
-                        )
-
-                        // Category Row
+                        // Inline Expandable Panels (animated with TFMotion.standard)
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                .animateContentSize(animationSpec = TFMotion.standard())
+                        ) {
+                            when (activeQuickPanel) {
+                                QuickPanelType.DATE_TIME -> {
+                                    Surface(
+                                        shape = TFShape.card,
+                                        color = colors.card,
+                                        border = if (colors.isDark) BorderStroke(hairline(), colors.cardStroke) else null,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(TFSpace.md),
+                                            verticalArrangement = Arrangement.spacedBy(TFSpace.md)
+                                        ) {
+                                            Text(
+                                                text = "Schedule Date & Time",
+                                                style = typography.headline,
+                                                color = colors.labelPrimary
+                                            )
+
+                                            // Quick Date Presets
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(TFSpace.sm)
+                                            ) {
+                                                listOf(
+                                                    "Today" to currentEpochDay,
+                                                    "Tomorrow" to currentEpochDay + 1
+                                                ).forEach { (label, epoch) ->
+                                                    val isSelected = selectedDate == label
+                                                    Surface(
+                                                        shape = TFShape.pill,
+                                                        color = if (isSelected) accentRoles.accentFill else colors.fillControl,
+                                                        modifier = Modifier
+                                                            .clip(TFShape.pill)
+                                                            .clickable {
+                                                                HapticManager.perform(context, HapticType.CLICK)
+                                                                selectedDate = label
+                                                                selectedEpochDay = epoch
+                                                            }
+                                                    ) {
+                                                        Text(
+                                                            text = label,
+                                                            style = typography.caption,
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                            color = if (isSelected) accentRoles.onAccent else colors.labelPrimary,
+                                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                                                        )
+                                                    }
+                                                }
+
+                                                // Weekend Preset
+                                                val isWeekendSelected = selectedDate.startsWith("Weekend")
+                                                Surface(
+                                                    shape = TFShape.pill,
+                                                    color = if (isWeekendSelected) accentRoles.accentFill else colors.fillControl,
+                                                    modifier = Modifier
+                                                        .clip(TFShape.pill)
+                                                        .clickable {
+                                                            HapticManager.perform(context, HapticType.CLICK)
+                                                            val cal = Calendar.getInstance()
+                                                            val daysUntilSat = (Calendar.SATURDAY - cal.get(Calendar.DAY_OF_WEEK) + 7) % 7
+                                                            val targetDays = if (daysUntilSat == 0) 7 else daysUntilSat
+                                                            cal.add(Calendar.DAY_OF_YEAR, targetDays)
+                                                            val fmt = SimpleDateFormat("MMM dd", Locale.getDefault())
+                                                            selectedDate = "Weekend (${fmt.format(cal.time)})"
+                                                            selectedEpochDay = cal.timeInMillis / (1000 * 60 * 60 * 24)
+                                                        }
+                                                ) {
+                                                    Text(
+                                                        text = "Weekend 🌅",
+                                                        style = typography.caption,
+                                                        fontWeight = if (isWeekendSelected) FontWeight.Bold else FontWeight.Normal,
+                                                        color = if (isWeekendSelected) accentRoles.onAccent else colors.labelPrimary,
+                                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                                                    )
+                                                }
+                                            }
+
+                                            // Quick Times Carousel
+                                            val quickTimes = remember(is24Hour) { TimeFormatHelper.getQuickTimes(is24Hour) }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .horizontalScroll(rememberScrollState()),
+                                                horizontalArrangement = Arrangement.spacedBy(TFSpace.sm)
+                                            ) {
+                                                quickTimes.forEach { qTime ->
+                                                    val isSelected = selectedTime == qTime
+                                                    Surface(
+                                                        shape = TFShape.pill,
+                                                        color = if (isSelected) accentRoles.accentFill else colors.fillControl,
+                                                        modifier = Modifier
+                                                            .clip(TFShape.pill)
+                                                            .clickable {
+                                                                HapticManager.perform(context, HapticType.CLICK)
+                                                                selectedTime = qTime
+                                                            }
+                                                    ) {
+                                                        Text(
+                                                            text = qTime,
+                                                            style = typography.caption,
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                            color = if (isSelected) accentRoles.onAccent else colors.labelPrimary,
+                                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                QuickPanelType.PRIORITY -> {
+                                    Surface(
+                                        shape = TFShape.card,
+                                        color = colors.card,
+                                        border = if (colors.isDark) BorderStroke(hairline(), colors.cardStroke) else null,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(TFSpace.md),
+                                            verticalArrangement = Arrangement.spacedBy(TFSpace.sm)
+                                        ) {
+                                            Text(
+                                                text = "Priority Level",
+                                                style = typography.headline,
+                                                color = colors.labelPrimary
+                                            )
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(TFShape.segmentedTrack)
+                                                    .background(colors.fillControl)
+                                                    .padding(2.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                            ) {
+                                                listOf(
+                                                    TaskPriority.NONE to "None",
+                                                    TaskPriority.LOW to "! Low",
+                                                    TaskPriority.MEDIUM to "!! Med",
+                                                    TaskPriority.HIGH to "!!! High"
+                                                ).forEach { (prio, label) ->
+                                                    val isSelected = selectedPriority == prio.key
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .height(32.dp)
+                                                            .clip(TFShape.segmentedThumb)
+                                                            .background(if (isSelected) colors.card else Color.Transparent)
+                                                            .clickable {
+                                                                HapticManager.perform(context, HapticType.CLICK)
+                                                                selectedPriority = prio.key
+                                                            },
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(
+                                                            text = label,
+                                                            style = typography.subheadline,
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                            color = if (isSelected) {
+                                                                when (prio) {
+                                                                    TaskPriority.LOW -> colors.blue
+                                                                    TaskPriority.MEDIUM -> colors.orange
+                                                                    TaskPriority.HIGH -> colors.red
+                                                                    else -> colors.labelPrimary
+                                                                }
+                                                            } else colors.labelSecondary
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                QuickPanelType.CATEGORY -> {
+                                    Surface(
+                                        shape = TFShape.card,
+                                        color = colors.card,
+                                        border = if (colors.isDark) BorderStroke(hairline(), colors.cardStroke) else null,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(TFSpace.md),
+                                            verticalArrangement = Arrangement.spacedBy(TFSpace.sm)
+                                        ) {
+                                            Text(
+                                                text = "Assign to List",
+                                                style = typography.headline,
+                                                color = colors.labelPrimary
+                                            )
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .horizontalScroll(rememberScrollState()),
+                                                horizontalArrangement = Arrangement.spacedBy(TFSpace.sm),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                categoriesList.forEach { cat ->
+                                                    val isSelected = selectedCategory.equals(cat.name, ignoreCase = true)
+                                                    Surface(
+                                                        shape = TFShape.pill,
+                                                        color = if (isSelected) accentRoles.accentFill else colors.fillControl,
+                                                        modifier = Modifier
+                                                            .clip(TFShape.pill)
+                                                            .clickable {
+                                                                HapticManager.perform(context, HapticType.CLICK)
+                                                                selectedCategory = cat.name
+                                                            }
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                                        ) {
+                                                            Text(cat.getEmoji(), fontSize = 13.sp)
+                                                            Text(
+                                                                text = cat.name,
+                                                                style = typography.caption,
+                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                                color = if (isSelected) accentRoles.onAccent else colors.labelPrimary
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                // + New List Button
+                                                Surface(
+                                                    shape = TFShape.pill,
+                                                    color = accentRoles.accentContainer,
+                                                    modifier = Modifier
+                                                        .clip(TFShape.pill)
+                                                        .clickable {
+                                                            HapticManager.perform(context, HapticType.CLICK)
+                                                            showCreateCategorySheet = true
+                                                        }
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Add,
+                                                            contentDescription = "New List",
+                                                            tint = accentRoles.accentText,
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                        Text(
+                                                            text = "New List",
+                                                            style = typography.caption,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = accentRoles.accentText
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                QuickPanelType.NOTES -> {
+                                    Surface(
+                                        shape = TFShape.card,
+                                        color = colors.card,
+                                        border = if (colors.isDark) BorderStroke(hairline(), colors.cardStroke) else null,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(TFSpace.md)
+                                        ) {
+                                            if (taskNotes.isEmpty()) {
+                                                Text(
+                                                    text = "Add notes or checklist details...",
+                                                    style = typography.body,
+                                                    color = colors.labelSecondary.copy(alpha = 0.5f)
+                                                )
+                                            }
+                                            BasicTextField(
+                                                value = taskNotes,
+                                                onValueChange = { taskNotes = it },
+                                                textStyle = TextStyle(
+                                                    fontSize = 15.sp,
+                                                    lineHeight = 20.sp,
+                                                    color = colors.labelPrimary
+                                                ),
+                                                cursorBrush = SolidColor(accentRoles.accentText),
+                                                minLines = 3,
+                                                maxLines = 6,
+                                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                }
+
+                                QuickPanelType.AI_SUGGESTION -> {
+                                    Surface(
+                                        shape = TFShape.card,
+                                        color = accentRoles.accentContainer,
+                                        border = BorderStroke(hairline(), accentRoles.accent),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(TFSpace.md),
+                                            verticalArrangement = Arrangement.spacedBy(TFSpace.sm)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.AutoAwesome,
+                                                    contentDescription = "Smart Schedule",
+                                                    tint = accentRoles.accentText,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Text(
+                                                    text = "Smart Suggestion: ${parsedSchedule.getSummaryPillText()}",
+                                                    style = typography.headline,
+                                                    color = accentRoles.accentText
+                                                )
+                                            }
+                                            Text(
+                                                text = "Parsed on-device from task title without sending data outside.",
+                                                style = typography.caption,
+                                                color = colors.labelSecondary
+                                            )
+                                            TFButton(
+                                                text = "Apply Suggestion",
+                                                onClick = { applySuggestion() },
+                                                type = TFButtonType.FILLED,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                }
+
+                                QuickPanelType.NONE -> { /* No inline panel active */ }
+                            }
+                        }
+
+                        // Icon Toolbar (docked right above keyboard with 48dp touch targets)
+                        Surface(
+                            shape = TFShape.card,
+                            color = colors.card,
+                            border = if (colors.isDark) BorderStroke(hairline(), colors.cardStroke) else null,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .padding(horizontal = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceAround,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Date & Time
+                                QuickToolbarIconButton(
+                                    icon = Icons.Outlined.CalendarMonth,
+                                    label = "Date",
+                                    isActive = activeQuickPanel == QuickPanelType.DATE_TIME,
+                                    hasValue = selectedDate != "Today",
+                                    onClick = {
+                                        activeQuickPanel = if (activeQuickPanel == QuickPanelType.DATE_TIME) QuickPanelType.NONE else QuickPanelType.DATE_TIME
+                                    }
+                                )
+
+                                // Priority
+                                QuickToolbarIconButton(
+                                    icon = Icons.Outlined.Flag,
+                                    label = "Priority",
+                                    isActive = activeQuickPanel == QuickPanelType.PRIORITY,
+                                    hasValue = selectedPriority != "NONE",
+                                    onClick = {
+                                        activeQuickPanel = if (activeQuickPanel == QuickPanelType.PRIORITY) QuickPanelType.NONE else QuickPanelType.PRIORITY
+                                    }
+                                )
+
+                                // Category
+                                QuickToolbarIconButton(
+                                    icon = Icons.Outlined.Category,
+                                    label = "List",
+                                    isActive = activeQuickPanel == QuickPanelType.CATEGORY,
+                                    hasValue = selectedCategory != initialCategory,
+                                    onClick = {
+                                        activeQuickPanel = if (activeQuickPanel == QuickPanelType.CATEGORY) QuickPanelType.NONE else QuickPanelType.CATEGORY
+                                    }
+                                )
+
+                                // Notes
+                                QuickToolbarIconButton(
+                                    icon = Icons.Outlined.Description,
+                                    label = "Notes",
+                                    isActive = activeQuickPanel == QuickPanelType.NOTES,
+                                    hasValue = taskNotes.isNotBlank(),
+                                    onClick = {
+                                        activeQuickPanel = if (activeQuickPanel == QuickPanelType.NOTES) QuickPanelType.NONE else QuickPanelType.NOTES
+                                    }
+                                )
+
+                                // AI Suggestion
+                                if (parsedSchedule.hasSuggestions) {
+                                    QuickToolbarIconButton(
+                                        icon = Icons.Default.AutoAwesome,
+                                        label = "AI",
+                                        isActive = activeQuickPanel == QuickPanelType.AI_SUGGESTION,
+                                        hasValue = true,
+                                        onClick = {
+                                            activeQuickPanel = if (activeQuickPanel == QuickPanelType.AI_SUGGESTION) QuickPanelType.NONE else QuickPanelType.AI_SUGGESTION
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // ──────────────────────────────────────────────
+                    // STAGE 2: DETAILS (Inset Grouped Form - Sec 11.2)
+                    // ──────────────────────────────────────────────
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(detailsScrollState)
+                            .padding(vertical = TFSpace.md),
+                        verticalArrangement = Arrangement.spacedBy(TFSpace.lg)
+                    ) {
+                        // Group 1: Title & Notes (min 80dp)
+                        TFCardGroup(headerTitle = "TASK INFORMATION") {
+                            // Title input
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = TFSpace.lg, vertical = 14.dp)
+                            ) {
+                                if (taskTitle.isEmpty()) {
+                                    Text(
+                                        text = "What needs to be done?",
+                                        style = typography.body,
+                                        color = colors.labelSecondary.copy(alpha = 0.5f)
+                                    )
+                                }
+                                BasicTextField(
+                                    value = taskTitle,
+                                    onValueChange = {
+                                        taskTitle = it
+                                        if (it.isNotBlank()) titleError = false
+                                    },
+                                    textStyle = TextStyle(
+                                        fontSize = 17.sp,
+                                        lineHeight = 22.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = colors.labelPrimary
+                                    ),
+                                    cursorBrush = SolidColor(accentRoles.accentText),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(
+                                        capitalization = KeyboardCapitalization.Sentences,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    keyboardActions = KeyboardActions(onDone = { submitTask() }),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            TFGroupDivider(startIndent = TFSpace.lg)
+
+                            // Notes input (min 80dp)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 80.dp)
+                                    .padding(horizontal = TFSpace.lg, vertical = 12.dp)
+                            ) {
+                                if (taskNotes.isEmpty()) {
+                                    Text(
+                                        text = "Notes or details...",
+                                        style = typography.subheadline,
+                                        color = colors.labelSecondary.copy(alpha = 0.45f)
+                                    )
+                                }
+                                BasicTextField(
+                                    value = taskNotes,
+                                    onValueChange = { taskNotes = it },
+                                    textStyle = TextStyle(
+                                        fontSize = 15.sp,
+                                        lineHeight = 20.sp,
+                                        color = colors.labelPrimary
+                                    ),
+                                    cursorBrush = SolidColor(accentRoles.accentText),
+                                    maxLines = 6,
+                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        // Group 2: Schedule (Date & Time with inline expanders)
+                        TFCardGroup(headerTitle = "SCHEDULE") {
+                            // Date row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        HapticManager.perform(context, HapticType.CLICK)
+                                        showInlineDatePicker = !showInlineDatePicker
+                                    }
+                                    .padding(horizontal = TFSpace.lg, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -857,292 +1046,538 @@ fun CreateTaskBottomSheet(
                                         modifier = Modifier
                                             .size(32.dp)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(SystemBlue.copy(alpha = 0.12f)),
+                                            .background(accentRoles.accentContainer),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Outlined.Category,
-                                            contentDescription = "List",
-                                            tint = SystemBlue,
+                                            imageVector = Icons.Outlined.CalendarMonth,
+                                            contentDescription = "Date",
+                                            tint = accentRoles.accentText,
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
                                     Text(
-                                        text = "List",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = SystemLabelPrimary
+                                        text = "Date",
+                                        style = typography.body,
+                                        color = colors.labelPrimary
                                     )
                                 }
 
-                                Text(
-                                    text = selectedCategory,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = SystemBlue
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Surface(
+                                        shape = TFShape.pill,
+                                        color = accentRoles.accentContainer
+                                    ) {
+                                        Text(
+                                            text = selectedDate,
+                                            style = typography.subheadline,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = accentRoles.accentText,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = if (showInlineDatePicker) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                        contentDescription = null,
+                                        tint = colors.labelSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
 
-                            // Category Chips Carousel
+                            // Quick Date Pills
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(horizontal = TFSpace.lg, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(TFSpace.sm)
                             ) {
-                                categoriesList.forEach { catItem ->
-                                    val isSelected = selectedCategory.equals(catItem.name, ignoreCase = true)
+                                listOf(
+                                    "Today" to currentEpochDay,
+                                    "Tomorrow" to currentEpochDay + 1
+                                ).forEach { (label, epoch) ->
+                                    val isSelected = selectedDate == label
                                     Surface(
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = if (isSelected) SystemBlue else SystemGroupedBackground,
-                                        border = if (isSelected) null else BorderStroke(0.5.dp, SystemDivider),
+                                        shape = TFShape.pill,
+                                        color = if (isSelected) accentRoles.accentFill else colors.fillControl,
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(14.dp))
+                                            .clip(TFShape.pill)
                                             .clickable {
                                                 HapticManager.perform(context, HapticType.CLICK)
-                                                selectedCategory = catItem.name
+                                                selectedDate = label
+                                                selectedEpochDay = epoch
+                                                showInlineDatePicker = false
                                             }
                                     ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                        Text(
+                                            text = label,
+                                            style = typography.caption,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) accentRoles.onAccent else colors.labelPrimary,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Inline Calendar Accordion
+                            AnimatedVisibility(
+                                visible = showInlineDatePicker,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                DatePicker(
+                                    state = datePickerState,
+                                    showModeToggle = false,
+                                    colors = DatePickerDefaults.colors(
+                                        selectedDayContainerColor = accentRoles.accentFill,
+                                        todayDateBorderColor = accentRoles.accentFill
+                                    )
+                                )
+                            }
+
+                            TFGroupDivider(startIndent = TFSpace.lg)
+
+                            // Time row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        HapticManager.perform(context, HapticType.CLICK)
+                                        showInlineTimePicker = !showInlineTimePicker
+                                    }
+                                    .padding(horizontal = TFSpace.lg, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.orange.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Schedule,
+                                            contentDescription = "Time",
+                                            tint = colors.orange,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Time",
+                                        style = typography.body,
+                                        color = colors.labelPrimary
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Surface(
+                                        shape = TFShape.pill,
+                                        color = accentRoles.accentContainer
+                                    ) {
+                                        Text(
+                                            text = selectedTime,
+                                            style = typography.subheadline,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = accentRoles.accentText,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = if (showInlineTimePicker) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                        contentDescription = null,
+                                        tint = colors.labelSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            // Quick Time Chips
+                            val quickTimes = remember(is24Hour) { TimeFormatHelper.getQuickTimes(is24Hour) }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(horizontal = TFSpace.lg, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(TFSpace.sm)
+                            ) {
+                                quickTimes.forEach { qTime ->
+                                    val isSelected = selectedTime == qTime && !showInlineTimePicker
+                                    Surface(
+                                        shape = TFShape.pill,
+                                        color = if (isSelected) accentRoles.accentFill else colors.fillControl,
+                                        modifier = Modifier
+                                            .clip(TFShape.pill)
+                                            .clickable {
+                                                HapticManager.perform(context, HapticType.CLICK)
+                                                selectedTime = qTime
+                                                showInlineTimePicker = false
+                                            }
+                                    ) {
+                                        Text(
+                                            text = qTime,
+                                            style = typography.caption,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) accentRoles.onAccent else colors.labelPrimary,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Inline TimePicker Accordion
+                            AnimatedVisibility(
+                                visible = showInlineTimePicker,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically()
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp)
+                                ) {
+                                    TimePicker(
+                                        state = timePickerState,
+                                        colors = TimePickerDefaults.colors(
+                                            clockDialColor = colors.canvas,
+                                            clockDialSelectedContentColor = Color.White,
+                                            clockDialUnselectedContentColor = colors.labelPrimary,
+                                            selectorColor = accentRoles.accentFill,
+                                            periodSelectorSelectedContainerColor = accentRoles.accentContainer,
+                                            periodSelectorSelectedContentColor = accentRoles.accentText
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        // Group 3: Priority & Category
+                        TFCardGroup(headerTitle = "ORGANIZATION") {
+                            // Priority
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = TFSpace.lg, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.red.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Flag,
+                                            contentDescription = "Priority",
+                                            tint = colors.red,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Priority",
+                                        style = typography.body,
+                                        color = colors.labelPrimary
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .clip(TFShape.segmentedTrack)
+                                        .background(colors.fillControl)
+                                        .padding(2.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    listOf(
+                                        TaskPriority.NONE to "None",
+                                        TaskPriority.LOW to "! Low",
+                                        TaskPriority.MEDIUM to "!! Med",
+                                        TaskPriority.HIGH to "!!! High"
+                                    ).forEach { (prio, label) ->
+                                        val isSelected = selectedPriority == prio.key
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(TFShape.segmentedThumb)
+                                                .background(if (isSelected) colors.card else Color.Transparent)
+                                                .clickable {
+                                                    HapticManager.perform(context, HapticType.CLICK)
+                                                    selectedPriority = prio.key
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            Text(catItem.getEmoji(), fontSize = 13.sp)
                                             Text(
-                                                text = catItem.name,
-                                                fontSize = 12.sp,
+                                                text = label,
+                                                style = typography.caption,
                                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isSelected) Color.White else SystemLabelPrimary
+                                                color = if (isSelected) {
+                                                    when (prio) {
+                                                        TaskPriority.LOW -> colors.blue
+                                                        TaskPriority.MEDIUM -> colors.orange
+                                                        TaskPriority.HIGH -> colors.red
+                                                        else -> colors.labelPrimary
+                                                    }
+                                                } else colors.labelSecondary
                                             )
                                         }
                                     }
                                 }
+                            }
 
-                                // + New Category Chip Button
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = SystemBlue.copy(alpha = 0.08f),
-                                    border = BorderStroke(1.dp, SystemBlue.copy(alpha = 0.35f)),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .clickable {
-                                            HapticManager.perform(context, HapticType.CLICK)
-                                            showCreateCategorySheet = true
-                                        }
+                            TFGroupDivider(startIndent = TFSpace.lg)
+
+                            // Category
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = TFSpace.lg, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = "New List",
-                                            tint = SystemBlue,
-                                            modifier = Modifier.size(14.dp)
-                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(accentRoles.accentContainer),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Category,
+                                                contentDescription = "List",
+                                                tint = accentRoles.accentText,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                         Text(
-                                            text = "New List",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = SystemBlue
+                                            text = "List",
+                                            style = typography.body,
+                                            color = colors.labelPrimary
                                         )
                                     }
-                                }
-                            }
-                        }
-                    }
-                }
 
-                // 6. Prominent Primary Bottom Button (Thumb Reach)
-                Button(
-                    onClick = { submitTask() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = SystemBlue,
-                        disabledContainerColor = SystemBlue.copy(alpha = 0.4f)
-                    ),
-                    shape = RoundedCornerShape(16.dp),
-                    enabled = canSubmit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Create Task",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            // 7. Floating Apple Keyboard Accessory Toolbar
-            Surface(
-                color = SystemSurface.copy(alpha = 0.98f),
-                tonalElevation = 3.dp,
-                border = BorderStroke(0.5.dp, SystemDivider),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Quick Date Toggle
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (selectedDate == "Tomorrow") SystemBlueLight else SystemGroupedBackground,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    HapticManager.perform(context, HapticType.CLICK)
-                                    if (selectedDate == "Today") {
-                                        selectedDate = "Tomorrow"
-                                        selectedEpochDay = currentEpochDay + 1
-                                    } else {
-                                        selectedDate = "Today"
-                                        selectedEpochDay = currentEpochDay
-                                    }
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.CalendarMonth,
-                                    contentDescription = "Quick Date",
-                                    tint = if (selectedDate == "Tomorrow") SystemBlue else SystemLabelSecondary,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Text(
-                                    text = selectedDate,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (selectedDate == "Tomorrow") SystemBlue else SystemLabelPrimary
-                                )
-                            }
-                        }
-
-                        // Quick Priority Cycle
-                        val prioEnum = TaskPriority.fromString(selectedPriority)
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (selectedPriority != "NONE") Color(prioEnum.badgeBgHex) else SystemGroupedBackground,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    HapticManager.perform(context, HapticType.CLICK)
-                                    selectedPriority = when (selectedPriority) {
-                                        "NONE" -> "LOW"
-                                        "LOW" -> "MEDIUM"
-                                        "MEDIUM" -> "HIGH"
-                                        else -> "NONE"
-                                    }
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Flag,
-                                    contentDescription = "Priority",
-                                    tint = if (selectedPriority != "NONE") Color(prioEnum.colorHex) else SystemLabelSecondary,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                if (selectedPriority != "NONE") {
                                     Text(
-                                        text = prioEnum.label,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(prioEnum.colorHex)
+                                        text = selectedCategory,
+                                        style = typography.subheadline,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = accentRoles.accentText
                                     )
                                 }
-                            }
-                        }
 
-                        // Quick Category Indicator
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = SystemGroupedBackground,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    HapticManager.perform(context, HapticType.CLICK)
-                                    val currentIdx = categoriesList.indexOfFirst { it.name.equals(selectedCategory, ignoreCase = true) }
-                                    if (categoriesList.isNotEmpty()) {
-                                        val nextIdx = (currentIdx + 1) % categoriesList.size
-                                        selectedCategory = categoriesList[nextIdx].name
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(TFSpace.sm),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    categoriesList.forEach { catItem ->
+                                        val isSelected = selectedCategory.equals(catItem.name, ignoreCase = true)
+                                        Surface(
+                                            shape = TFShape.pill,
+                                            color = if (isSelected) accentRoles.accentFill else colors.fillControl,
+                                            modifier = Modifier
+                                                .clip(TFShape.pill)
+                                                .clickable {
+                                                    HapticManager.perform(context, HapticType.CLICK)
+                                                    selectedCategory = catItem.name
+                                                }
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                            ) {
+                                                Text(catItem.getEmoji(), fontSize = 13.sp)
+                                                Text(
+                                                    text = catItem.name,
+                                                    style = typography.caption,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                    color = if (isSelected) accentRoles.onAccent else colors.labelPrimary
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = TFShape.pill,
+                                        color = accentRoles.accentContainer,
+                                        modifier = Modifier
+                                            .clip(TFShape.pill)
+                                            .clickable {
+                                                HapticManager.perform(context, HapticType.CLICK)
+                                                showCreateCategorySheet = true
+                                            }
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = "New List",
+                                                tint = accentRoles.accentText,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                text = "New List",
+                                                style = typography.caption,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = accentRoles.accentText
+                                            )
+                                        }
                                     }
                                 }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Category,
-                                    contentDescription = "Quick List",
-                                    tint = SystemBlue,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Text(
-                                    text = selectedCategory,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = SystemLabelPrimary
-                                )
                             }
                         }
-                    }
 
-                    // Quick Right Add Action Button
-                    if (canSubmit) {
-                        Surface(
-                            shape = CircleShape,
-                            color = SystemBlue,
+                        // Prominent Primary Button at Bottom of Details (Thumb reach)
+                        Box(
                             modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable { submitTask() }
+                                .fillMaxWidth()
+                                .padding(horizontal = TFSpace.lg, vertical = TFSpace.md)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Submit",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .padding(6.dp)
-                                    .size(18.dp)
+                            TFButton(
+                                text = "Create Task",
+                                onClick = { submitTask() },
+                                type = TFButtonType.FILLED,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = accentRoles.onAccent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                enabled = canSubmit,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Compact removable chip for live NLP recognized schedule tokens in Stage 1 Quick Capture.
+ */
+@Composable
+private fun QuickRemovableChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    isHighlighted: Boolean,
+    onRemove: () -> Unit
+) {
+    val colors = TFTheme.colors
+    val typography = TFTheme.typography
+    val accentRoles = LocalAccentRoles.current
+
+    Surface(
+        shape = TFShape.pill,
+        color = if (isHighlighted) accentRoles.accentContainer else colors.fillControl,
+        border = if (isHighlighted) BorderStroke(hairline(), accentRoles.accent) else null
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 4.dp, bottom = 4.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isHighlighted) accentRoles.accentText else colors.labelSecondary,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = text,
+                style = typography.caption,
+                fontWeight = if (isHighlighted) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (isHighlighted) accentRoles.accentText else colors.labelPrimary
+            )
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .clickable { onRemove() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove",
+                    tint = if (isHighlighted) accentRoles.accentText else colors.labelSecondary,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Toolbar icon button for quick accessory actions above keyboard.
+ */
+@Composable
+private fun QuickToolbarIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isActive: Boolean,
+    hasValue: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = TFTheme.colors
+    val accentRoles = LocalAccentRoles.current
+
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(if (isActive) accentRoles.accentContainer else Color.Transparent)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (isActive || hasValue) accentRoles.accentText else colors.labelSecondary,
+            modifier = Modifier.size(22.dp)
+        )
+
+        // Accent indicator dot if value is customized
+        if (hasValue && !isActive) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-8).dp, y = 8.dp)
+                    .clip(CircleShape)
+                    .background(accentRoles.accentFill)
+            )
         }
     }
 }

@@ -34,6 +34,8 @@ data class UserEntity(
     val lockSalt: String? = null,
     val isLockEnabled: Boolean = false,
     val isBiometricEnabled: Boolean = false,
+    val isFaceAuthEnabled: Boolean = false,
+    val isFingerprintAuthEnabled: Boolean = false,
     val lockTimeoutMs: Long = 0L,
     // Profile information
     val avatarPresetId: Int = 0,

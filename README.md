@@ -14,22 +14,37 @@ TaskFlow is a modern, high-performance task management application for Android, 
 * **Login & Recovery**: Username/Phone and Password authentication with visibility toggles, biometric instant login shortcut, "Forgot Password" SMS OTP recovery flow, and intuitive Log Out controls in Settings & Profile.
 
 
-### 2. 🎨 Apple (iOS HIG) Design System
-* **Authentic Styling**: Uses iOS system color tokens (`SystemBlue`, `SystemGroupedBackground`, `SystemSurface`) and divider styles.
-* **Inset Grouped Layouts**: Task lists and action cards are grouped within `12dp` rounded container structures.
-* **Apple Typographic Hierarchy**: Formatted using SF-styled font sizes, weights, and letter-spacings.
+### 2. 🎨 TaskFlow Apple (iOS HIG) Design System & Primitives
+* **Semantic Design Tokens**: Standardized token architecture across colors (`TFColor.kt`), typography (`TFType.kt`), corner squircles (`TFShape.kt`), 4dp-grid layout dimensions (`TFSpacing.kt`), motion springs (`TFMotion.kt`), and tactile haptics (`TFHaptics.kt`).
+* **Accent Role Runtime Contrast Solver (`AccentRoles.kt`)**: Dynamically derives 5 accessible color roles per accent (Primary, OnPrimary, Container, OnContainer, Subtle) ensuring strict WCAG 2.1 AA/AAA compliance across all 8 accent palettes.
+* **Physics-Based Real Spring Animations (`TFMotion.kt`)**: Real iOS spring physics curves (`press`, `snappy`, `standard`, `sheet`, `bouncy`) replacing linear easing curves across interactions and sheet transitions.
+* **Primitive Component Suite (`ui/components/primitives/`)**:
+  * **Inset Grouped Containers (`TFCardGroup`)**: `12dp` rounded grouped cards with `1 physical pixel` dividers indented at `56dp`.
+  * **Interactive Task Rows (`TFTaskRow`)**: Interactive task items with haptic feedback, spring scale transitions, priority badges, category chips, and strike-through animations.
+  * **Custom UI Primitives**: `TFButton` (Primary, Secondary, Plain, Destructive), `TFSegmentedControl` (sliding thumb), `TFChip`, `TFSwitch`, `TFSkeleton` shimmer placeholders, and `TFEmptyState` illustrations.
+* **Unified Navigation Chrome (`ui/components/navigation/`)**:
+  * **Large Title Navigation Bar (`TFLargeTitleNavBar`)**: Collapsing Large Title header with blur effect.
+  * **5-Slot Docked Tab Bar (`TFTabBar`)**: 56dp height + gesture insets with center-docked 52dp Plus button rising 8dp above the bar without floating FAB clutter.
+* **Progressive-Disclosure Create & Edit Sheets**: 2-stage progressive disclosure where Stage 1 is Quick Capture (auto-height, immediate keyboard focus, live on-device NLP schedule token extraction with removable chips, docked toolbar) and Stage 2 expands on drag-up to a full Inset Grouped form with inline calendar and clock accordions.
+* **900ms Task Completion Sequence**: Choreographed animation sequence featuring 180ms check draw + ring fill, title strikethrough ease, radial micro-confetti burst, `+50 XP` floating capsule, and placement animation to completed group with instant cancel/undo affordance.
+* **Dark Mode 1px Hairline Card Separation**: 1px physical hairline `cardStroke` (`#545458` @ 55%) border over `#1C1C1E` dark cards against pure black `#000000` canvas to prevent card blending; flat white on `#F2F2F7` without borders or shadows in light mode.
+
 
 ### 3. 📅 Interactive Calendar Screen
 * **Multi-View Interface**: Toggle seamlessly between **Month**, **Week**, and **Agenda** modes.
 * **Smart Sorting**: Automatically groups and ranks tasks chronologically by time (AM/PM parsed values) with completed tasks grouped cleanly at the bottom.
 * **Filters**: Quick filtering options by category list.
 
-### 4. 🔒 Passcode, Pattern & Biometric Security (Face ID & Fingerprint)
-* **Hardware Modality Detection**: Automatically inspects device hardware (`PackageManager.FEATURE_FACE`, `PackageManager.FEATURE_FINGERPRINT`) and `BiometricManager` capability to dynamically adapt the security experience.
-* **Apple Face ID Integration**: Features an authentic Apple iOS Face ID vector icon (`IosFaceIdIcon`), adaptive keypad buttons, contextual subtitles ("Look at your device to continue"), and dynamic status badges conforming to Apple Human Interface Guidelines.
-* **App Lock Options**: Configure Passcode (4-digit & 6-digit using custom iOS-style numeric keypads), Pattern Lock (via custom drawn pattern canvases), Alphanumeric Password, or Biometrics (Face ID / Fingerprint unlock).
-* **Multi-Modal Biometric Support**: Seamless support for Class 3 and Class 2 biometrics (Google Pixel 4/7/8/9, Samsung Galaxy One UI Face Recognition, OnePlus, Xiaomi) with zero battery drain, secure TEE authentication, and graceful passcode fallbacks.
-* **Smart Background Locking**: Monitors lifecycle changes using `FragmentActivity` to automatically prompt auth whenever the app is backgrounded or resumed.
+### 4. 🔒 Passcode, Pattern & Multi-Tier Biometric Security (Face ID & Fingerprint)
+* **Direct Front-Camera Face Lock (Google ML Kit + CameraX)**: Implements on-device face detection powered by CameraX and Google ML Kit Fast Face Detection. When Face Lock is enabled, the front camera initiates automatically upon opening or resuming the application, performing real-time facial recognition inside an authentic Apple Face ID rounded squircle viewfinder with animated scanning brackets and laser beam.
+* **3-Tier Authentication Priority Hierarchy**:
+  1. **Priority 1 - Face Lock**: Automatically triggers front-camera face detection immediately upon app launch; upon face verification, triggers haptic success feedback and smoothly unlocks.
+  2. **Priority 2 - Fingerprint**: Graceful biometric fallback via Android OS `BiometricPrompt` if face detection is not recognized within a 6-second timeout, if the user declines, or if the user taps "Use Fingerprint".
+  3. **Priority 3 - Manual PIN / Passcode**: Safe fallback to 4-Digit/6-Digit PIN keypad, Pattern grid, or Alphanumeric Password with persistent "Scan Face ID" and "Fingerprint" shortcut pills for instant re-authentication.
+* **Hardware Modality Detection**: Automatically inspects device hardware (`PackageManager.FEATURE_CAMERA_FRONT`, `PackageManager.FEATURE_FINGERPRINT`) and `BiometricManager` capability to dynamically adapt the security experience.
+* **Apple Face ID Integration**: Features an authentic Apple iOS Face ID vector icon (`IosFaceIdIcon`), adaptive keypad buttons, contextual subtitles ("Position your face directly in the frame"), and dynamic status badges conforming to Apple Human Interface Guidelines.
+* **App Lock Options**: Configure Passcode (4-digit & 6-digit using custom iOS-style numeric keypads), Pattern Lock (via custom drawn pattern canvases), Alphanumeric Password, Face Lock, or Fingerprint unlock.
+* **Smart Background Locking**: Monitors lifecycle changes using `FragmentActivity` to automatically enforce authentication whenever the app is backgrounded or resumed.
 
 ### 5. 🔔 Smart Local Reminders & Dynamic Notification Branding
 * **Scheduled Alarms**: Direct integration with Android's `AlarmManager` to broadcast scheduled reminders.

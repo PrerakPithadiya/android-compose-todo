@@ -67,6 +67,24 @@ object BiometricAuthHelper {
         }
     }
 
+    fun isFaceAuthAvailable(context: Context): Boolean {
+        val pm = context.packageManager
+        val hasFrontCamera = pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT) ||
+                pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+        val hasFaceHardware = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            pm.hasSystemFeature(PackageManager.FEATURE_FACE)
+        } else {
+            pm.hasSystemFeature("android.hardware.biometrics.face")
+        }
+        return hasFrontCamera || hasFaceHardware
+    }
+
+    fun isFingerprintAuthAvailable(context: Context): Boolean {
+        val pm = context.packageManager
+        val hasFingerprint = pm.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)
+        return hasFingerprint || isBiometricSupported(context)
+    }
+
     fun getBiometricDisplayName(context: Context): String {
         return when (getBiometricModality(context)) {
             BiometricModality.FACE_ONLY -> "Face ID"
@@ -139,6 +157,10 @@ object BiometricAuthHelper {
         }
     }
 
+    fun getFaceIcon(): ImageVector = IosFaceIdIcon
+
+    fun getFingerprintIcon(): ImageVector = Icons.Outlined.Fingerprint
+
     fun promptBiometric(
         activity: FragmentActivity,
         title: String = "Unlock TaskFlow",
@@ -165,13 +187,88 @@ object BiometricAuthHelper {
 
                 override fun onAuthenticationFailed() {
                     super.onAuthenticationFailed()
-                    val modality = getBiometricModality(activity)
-                    val failureMsg = when (modality) {
-                        BiometricModality.FACE_ONLY -> "Face not recognized. Please look directly at the screen."
-                        BiometricModality.FINGERPRINT_ONLY -> "Fingerprint not recognized. Please try again."
-                        else -> "Face or fingerprint not recognized. Please try again."
-                    }
-                    onError(failureMsg)
+                    // Biometric authentication failed (e.g., wrong face/fingerprint)
+                    onError("Authentication failed")
+                }
+            }
+        )
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setNegativeButtonText(negativeButtonText)
+            .setAllowedAuthenticators(BIOMETRIC_STRONG or BIOMETRIC_WEAK)
+            .build()
+
+        biometricPrompt.authenticate(promptInfo)
+    }
+
+    fun promptFaceAuth(
+        activity: FragmentActivity,
+        title: String = "Unlock TaskFlow",
+        subtitle: String = "Look at your device to continue",
+        negativeButtonText: String = "Use Fingerprint",
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit = {}
+    ) {
+        val executor = ContextCompat.getMainExecutor(activity)
+        val biometricPrompt = BiometricPrompt(
+            activity,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    onSuccess()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    onError(errString.toString())
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    onError("Face authentication failed")
+                }
+            }
+        )
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(title)
+            .setSubtitle(subtitle)
+            .setNegativeButtonText(negativeButtonText)
+            .setAllowedAuthenticators(BIOMETRIC_STRONG or BIOMETRIC_WEAK)
+            .build()
+
+        biometricPrompt.authenticate(promptInfo)
+    }
+
+    fun promptFingerprintAuth(
+        activity: FragmentActivity,
+        title: String = "Unlock TaskFlow",
+        subtitle: String = "Touch fingerprint sensor to continue",
+        negativeButtonText: String = "Use Passcode",
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit = {}
+    ) {
+        val executor = ContextCompat.getMainExecutor(activity)
+        val biometricPrompt = BiometricPrompt(
+            activity,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    onSuccess()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    onError(errString.toString())
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    onError("Fingerprint authentication failed")
                 }
             }
         )

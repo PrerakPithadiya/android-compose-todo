@@ -33,6 +33,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import com.example.todo_list.model.TaskItem
 import com.example.todo_list.model.TaskListCategory
+import com.example.todo_list.ui.components.primitives.TFCardGroup
+import com.example.todo_list.ui.components.primitives.TFGroupDivider
+import com.example.todo_list.ui.components.primitives.TFTaskRow
+import com.example.todo_list.ui.components.primitives.TFEmptyState
+import com.example.todo_list.ui.components.primitives.TFSegmentedControl
 import com.example.todo_list.ui.theme.*
 import com.example.todo_list.utils.HapticManager
 import java.text.SimpleDateFormat
@@ -271,19 +276,29 @@ fun CalendarScreen(
             // Agenda List Cards (Completed tasks sorted to bottom automatically)
             if (tasksForSelectedDate.isEmpty()) {
                 item(key = "calendar_empty_schedule") {
-                    EmptyScheduleState(
-                        dateString = selectedDayTitle,
-                        onAddTaskClick = onAddTaskClick
+                    TFEmptyState(
+                        headline = "Nothing scheduled",
+                        body = "Tap a time slot to plan your day.",
+                        ctaText = "Add Task",
+                        onCtaClick = onAddTaskClick
                     )
                 }
             } else {
-                items(tasksForSelectedDate, key = { it.id }) { task ->
-                    CalendarTaskCardItem(
-                        task = task,
-                        onToggleComplete = onToggleComplete,
-                        onEditTask = onEditTask,
-                        onDeleteTask = onDeleteTask
-                    )
+                item(key = "calendar_grouped_tasks") {
+                    TFCardGroup {
+                        tasksForSelectedDate.forEachIndexed { index, task ->
+                            key(task.id) {
+                                TFTaskRow(
+                                    task = task,
+                                    onToggleComplete = onToggleComplete,
+                                    onClick = { onEditTask(task) }
+                                )
+                                if (index < tasksForSelectedDate.size - 1) {
+                                    TFGroupDivider()
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -337,10 +352,11 @@ fun CalendarHeaderBar(
                 }
 
                 // Apple iOS Segmented Control
-                IosSegmentedControl(
+                TFSegmentedControl(
                     items = listOf("Month", "Week", "Agenda"),
                     selectedIndex = viewMode,
-                    onOptionSelected = onViewModeChange
+                    onItemSelected = onViewModeChange,
+                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
                 )
 
                 // Add Task Icon Button

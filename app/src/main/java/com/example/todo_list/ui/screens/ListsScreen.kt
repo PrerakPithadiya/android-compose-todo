@@ -41,6 +41,9 @@ import com.example.todo_list.model.TaskListCategory
 import com.example.todo_list.ui.theme.*
 import com.example.todo_list.ui.components.CreateCategoryBottomSheet
 import com.example.todo_list.ui.components.DeleteCategoryMigrationDialog
+import com.example.todo_list.ui.components.primitives.TFCardGroup
+import com.example.todo_list.ui.components.primitives.TFGroupDivider
+import com.example.todo_list.ui.components.primitives.TFEmptyState
 import com.example.todo_list.utils.HapticManager
 import kotlinx.coroutines.launch
 
@@ -183,45 +186,48 @@ fun ListsScreen(
                     }
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SystemSurface,
-                    border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
-                    shadowElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        if (filteredCategories.isEmpty()) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp)
-                            ) {
-                                Text(
-                                    text = "No lists found",
-                                    fontSize = 15.sp,
-                                    color = SystemLabelSecondary
+                if (filteredCategories.isEmpty()) {
+                    TFCardGroup {
+                        TFEmptyState(
+                            headline = "Create your first list",
+                            body = "Group tasks by project, area or goal.",
+                            ctaText = "New List",
+                            onCtaClick = { showCreateListSheet = true },
+                            starterChips = listOf("Work", "Personal", "Health", "Study"),
+                            onChipClick = { name ->
+                                val defaultColorHex = "#007AFF"
+                                onCreateCategory(
+                                    TaskListCategory(
+                                        id = java.util.UUID.randomUUID().toString(),
+                                        name = name,
+                                        colorHex = defaultColorHex,
+                                        iconName = "List"
+                                    )
                                 )
                             }
-                        } else {
-                            filteredCategories.forEachIndexed { index, category ->
-                                key(category.id) {
-                                    val (activeCount, totalCatCount, ratio) = categoryStatsMap[category.id] ?: Triple(0, 0, 0f)
+                        )
+                    }
+                } else {
+                    TFCardGroup {
+                        filteredCategories.forEachIndexed { index, category ->
+                            key(category.id) {
+                                val (activeCount, totalCatCount, ratio) = categoryStatsMap[category.id] ?: Triple(0, 0, 0f)
 
-                                    CategoryListItemRow(
-                                        category = category,
-                                        activeCount = activeCount,
-                                        progressRatio = ratio,
-                                        totalCount = totalCatCount,
-                                        showDivider = index < filteredCategories.size - 1,
-                                        onClick = {
-                                            selectedCategoryForDetail = category
-                                        },
-                                        onDeleteCategory = {
-                                            categoryPendingDelete = category
-                                        }
-                                    )
+                                CategoryListItemRow(
+                                    category = category,
+                                    activeCount = activeCount,
+                                    progressRatio = ratio,
+                                    totalCount = totalCatCount,
+                                    showDivider = false,
+                                    onClick = {
+                                        selectedCategoryForDetail = category
+                                    },
+                                    onDeleteCategory = {
+                                        categoryPendingDelete = category
+                                    }
+                                )
+                                if (index < filteredCategories.size - 1) {
+                                    TFGroupDivider()
                                 }
                             }
                         }

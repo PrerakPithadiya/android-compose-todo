@@ -1,5 +1,6 @@
 package com.example.todo_list.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,10 +22,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.todo_list.model.TaskListCategory
+import com.example.todo_list.ui.components.primitives.TFButton
+import com.example.todo_list.ui.components.primitives.TFButtonType
 import com.example.todo_list.ui.screens.getCategoryIcon
 import com.example.todo_list.ui.theme.*
 import com.example.todo_list.utils.HapticManager
@@ -36,12 +40,16 @@ fun CreateCategoryBottomSheet(
     onCreateCategory: (TaskListCategory) -> Unit
 ) {
     val context = LocalContext.current
+    val colors = TFTheme.colors
+    val typography = TFTheme.typography
+    val accentRoles = LocalAccentRoles.current
+
     var listName by remember { mutableStateOf("") }
     var selectedColorHex by remember { mutableStateOf("#007AFF") }
     var selectedIconName by remember { mutableStateOf("List") }
     var nameError by remember { mutableStateOf(false) }
 
-    val colors = listOf(
+    val paletteColors = listOf(
         "#007AFF", // System Blue
         "#AF52DE", // System Purple
         "#34C759", // System Green
@@ -66,17 +74,27 @@ fun CreateCategoryBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = SystemGroupedBackground,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        containerColor = colors.canvas,
+        shape = TFShape.sheet,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 4.dp)
+                    .width(36.dp)
+                    .height(5.dp)
+                    .clip(CircleShape)
+                    .background(colors.labelTertiary)
+            )
+        }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = TFSpace.lg)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(TFSpace.md)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -86,14 +104,13 @@ fun CreateCategoryBottomSheet(
                 Column {
                     Text(
                         text = "New Category",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SystemLabelPrimary
+                        style = typography.title2,
+                        color = colors.labelPrimary
                     )
                     Text(
                         text = "Create a custom category with color & icon",
-                        fontSize = 13.sp,
-                        color = SystemLabelSecondary
+                        style = typography.subheadline,
+                        color = colors.labelSecondary
                     )
                 }
 
@@ -101,24 +118,29 @@ fun CreateCategoryBottomSheet(
                     onClick = onDismiss,
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(SystemGray5)
+                        .background(colors.fillControl)
                         .size(36.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Clear, contentDescription = "Close", tint = SystemLabelSecondary, modifier = Modifier.size(20.dp))
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Close",
+                        tint = colors.labelSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
 
-            // Preview Badge Header
+            // Preview Badge Header (80dp live preview)
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp)
+                    .padding(vertical = TFSpace.sm)
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(80.dp)
                         .clip(CircleShape)
                         .background(Color(android.graphics.Color.parseColor(selectedColorHex)))
                 ) {
@@ -126,7 +148,7 @@ fun CreateCategoryBottomSheet(
                         imageVector = getCategoryIcon(selectedIconName, listName),
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(40.dp)
                     )
                 }
             }
@@ -135,9 +157,9 @@ fun CreateCategoryBottomSheet(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = "CATEGORY NAME",
-                    fontSize = 11.sp,
+                    style = typography.caption,
                     fontWeight = FontWeight.Bold,
-                    color = SystemLabelSecondary,
+                    color = colors.labelSecondary,
                     letterSpacing = 0.5.sp
                 )
 
@@ -147,15 +169,26 @@ fun CreateCategoryBottomSheet(
                         listName = it
                         if (it.isNotBlank()) nameError = false
                     },
-                    placeholder = { Text("e.g. Design, Finance, Travel, Groceries") },
+                    placeholder = {
+                        Text(
+                            "e.g. Design, Finance, Travel, Groceries",
+                            style = typography.body,
+                            color = colors.labelSecondary.copy(alpha = 0.5f)
+                        )
+                    },
+                    textStyle = TextStyle(
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.labelPrimary
+                    ),
                     singleLine = true,
                     isError = nameError,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = TFShape.card,
                     colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = SystemSurface,
-                        focusedContainerColor = SystemSurface,
-                        unfocusedBorderColor = SystemDivider,
-                        focusedBorderColor = SystemBlue
+                        unfocusedContainerColor = colors.card,
+                        focusedContainerColor = colors.card,
+                        unfocusedBorderColor = if (colors.isDark) colors.cardStroke else colors.separator,
+                        focusedBorderColor = accentRoles.accentText
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -163,8 +196,8 @@ fun CreateCategoryBottomSheet(
                 if (nameError) {
                     Text(
                         text = "Please enter a category name",
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 12.sp
+                        color = colors.red,
+                        style = typography.caption
                     )
                 }
             }
@@ -173,9 +206,9 @@ fun CreateCategoryBottomSheet(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "COLOR",
-                    fontSize = 11.sp,
+                    style = typography.caption,
                     fontWeight = FontWeight.Bold,
-                    color = SystemLabelSecondary,
+                    color = colors.labelSecondary,
                     letterSpacing = 0.5.sp
                 )
 
@@ -183,16 +216,16 @@ fun CreateCategoryBottomSheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    colors.forEach { hex ->
+                    paletteColors.forEach { hex ->
                         val isSelected = hex.equals(selectedColorHex, ignoreCase = true)
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(38.dp)
                                 .clip(CircleShape)
                                 .background(Color(android.graphics.Color.parseColor(hex)))
                                 .then(
-                                    if (isSelected) Modifier.border(3.dp, SystemLabelPrimary, CircleShape) else Modifier
+                                    if (isSelected) Modifier.border(3.dp, colors.labelPrimary, CircleShape) else Modifier
                                 )
                                 .clickable {
                                     HapticManager.performClick(context)
@@ -216,9 +249,9 @@ fun CreateCategoryBottomSheet(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "ICON",
-                    fontSize = 11.sp,
+                    style = typography.caption,
                     fontWeight = FontWeight.Bold,
-                    color = SystemLabelSecondary,
+                    color = colors.labelSecondary,
                     letterSpacing = 0.5.sp
                 )
 
@@ -229,14 +262,14 @@ fun CreateCategoryBottomSheet(
                     items(icons) { (iconLabel, iconVector) ->
                         val isSelected = iconLabel.equals(selectedIconName, ignoreCase = true)
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) SystemBlue else SystemSurface,
-                            border = androidx.compose.foundation.BorderStroke(
-                                0.5.dp,
-                                if (isSelected) SystemBlue else SystemDivider
+                            shape = TFShape.card,
+                            color = if (isSelected) accentRoles.accentFill else colors.card,
+                            border = BorderStroke(
+                                hairline(),
+                                if (isSelected) accentRoles.accent else (if (colors.isDark) colors.cardStroke else colors.separator)
                             ),
                             modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(TFShape.card)
                                 .clickable {
                                     HapticManager.performClick(context)
                                     selectedIconName = iconLabel
@@ -250,14 +283,14 @@ fun CreateCategoryBottomSheet(
                                 Icon(
                                     imageVector = iconVector,
                                     contentDescription = iconLabel,
-                                    tint = if (isSelected) Color.White else SystemLabelPrimary,
+                                    tint = if (isSelected) accentRoles.onAccent else colors.labelPrimary,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
                                     text = iconLabel,
-                                    fontSize = 13.sp,
+                                    style = typography.subheadline,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) Color.White else SystemLabelPrimary
+                                    color = if (isSelected) accentRoles.onAccent else colors.labelPrimary
                                 )
                             }
                         }
@@ -268,7 +301,8 @@ fun CreateCategoryBottomSheet(
             Spacer(modifier = Modifier.height(6.dp))
 
             // Create Button
-            Button(
+            TFButton(
+                text = "Create Category",
                 onClick = {
                     if (listName.isBlank()) {
                         nameError = true
@@ -284,19 +318,9 @@ fun CreateCategoryBottomSheet(
                         onCreateCategory(newCategory)
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text(
-                    text = "Create Category",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
+                type = TFButtonType.FILLED,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

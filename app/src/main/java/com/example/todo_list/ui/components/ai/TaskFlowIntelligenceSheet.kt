@@ -308,7 +308,7 @@ private fun IntelligenceHeader(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = if (isFallback) "⚡ Local Heuristic Engine" else "✦ Gemini 1.5 Flash",
+                        text = if (isFallback) "⚡ Optimized on this device" else "✦ Enhanced with cloud AI",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = if (isFallback) SystemLabelSecondary else SystemBlue

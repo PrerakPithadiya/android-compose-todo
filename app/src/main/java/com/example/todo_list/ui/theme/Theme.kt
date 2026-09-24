@@ -52,7 +52,21 @@ fun TaskFlowTheme(
         )
     }
 
-    CompositionLocalProvider(LocalTaskFlowColors provides taskFlowColors) {
+    val tfColors = if (darkTheme) DarkTFColors else LightTFColors
+    val accentRoles = resolveAccent(
+        brand = if (darkTheme) accentColor.darkColor else accentColor.lightColor,
+        container = if (darkTheme) accentColor.darkContainer else accentColor.lightContainer,
+        card = tfColors.card,
+        canvas = tfColors.canvas,
+        dark = darkTheme
+    )
+
+    CompositionLocalProvider(
+        LocalTaskFlowColors provides taskFlowColors,
+        LocalTFColors provides tfColors,
+        LocalAccentRoles provides accentRoles,
+        LocalTFTypography provides DefaultTFTypography
+    ) {
         MaterialTheme(
             colorScheme = materialColors,
             content = content

@@ -34,6 +34,11 @@ android {
     buildFeatures {
         compose = true
     }
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
@@ -52,7 +57,15 @@ dependencies {
     // Room Database & Coroutines Flow
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
+    kspDebug(libs.androidx.room.compiler)
+    kspRelease(libs.androidx.room.compiler)
+
+    // CameraX & ML Kit On-Device Face Detection
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.face.detection)
 
     debugImplementation(libs.compose.ui.tooling)
     testImplementation(libs.junit)

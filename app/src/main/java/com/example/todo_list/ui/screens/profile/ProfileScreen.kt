@@ -101,7 +101,7 @@ fun ProfileScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(SystemGroupedBackground)
+            .background(TFTheme.colors.canvas)
     ) {
         // 1. Sticky Glass Header Bar (iOS Large Title + Back + Quick Actions)
         ProfileHeaderBar(
@@ -255,7 +255,7 @@ fun ProfileScreen(
                             title = "Log Out of Account",
                             onClick = { showSignOutDialog = true }
                         )
-                        HorizontalDivider(color = SystemDivider, thickness = 0.5.dp, modifier = Modifier.padding(start = 56.dp))
+                        HorizontalDivider(color = TFTheme.colors.separator, thickness = hairline(), modifier = Modifier.padding(start = 56.dp))
                         ProfileDestructiveRow(
                             icon = Icons.Outlined.RestartAlt,
                             title = "Reset Profile to Defaults",
@@ -1423,10 +1423,11 @@ fun ProfileSectionHeader(title: String) {
 
 @Composable
 fun ProfileGroupCard(content: @Composable ColumnScope.() -> Unit) {
+    val colors = TFTheme.colors
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = SystemSurface,
-        border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+        shape = TFShape.card,
+        color = colors.card,
+        border = if (colors.isDark) androidx.compose.foundation.BorderStroke(hairline(), colors.cardStroke) else null,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -1486,7 +1487,7 @@ fun ProfileSettingRow(
         }
 
         if (showDivider) {
-            HorizontalDivider(color = SystemDivider, thickness = 0.5.dp, modifier = Modifier.padding(start = 50.dp))
+            HorizontalDivider(color = TFTheme.colors.separator, thickness = hairline(), modifier = Modifier.padding(start = 50.dp))
         }
     }
 }

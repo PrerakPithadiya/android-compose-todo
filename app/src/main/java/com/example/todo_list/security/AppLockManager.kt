@@ -31,6 +31,12 @@ object AppLockManager {
     var isBiometricEnabled by mutableStateOf(false)
         private set
 
+    var isFaceAuthEnabled by mutableStateOf(false)
+        private set
+
+    var isFingerprintAuthEnabled by mutableStateOf(false)
+        private set
+
     var currentLockType by mutableStateOf(LockType.PIN_4)
         private set
 
@@ -54,6 +60,8 @@ object AppLockManager {
         if (user == null) {
             isLockEnabled = false
             isBiometricEnabled = false
+            isFaceAuthEnabled = false
+            isFingerprintAuthEnabled = false
             isLocked = false
             currentLockType = LockType.PIN_4
             lockTimeoutMs = 0L
@@ -62,6 +70,8 @@ object AppLockManager {
 
         isLockEnabled = user.isLockEnabled
         isBiometricEnabled = user.isBiometricEnabled
+        isFaceAuthEnabled = user.isFaceAuthEnabled
+        isFingerprintAuthEnabled = user.isFingerprintAuthEnabled
         currentLockType = LockType.fromId(user.lockType)
         lockTimeoutMs = user.lockTimeoutMs
 
@@ -82,6 +92,8 @@ object AppLockManager {
         isLocked = false
         isLockEnabled = false
         isBiometricEnabled = false
+        isFaceAuthEnabled = false
+        isFingerprintAuthEnabled = false
         lastBackgroundTimestamp = 0L
         prefs?.edit()?.putLong(KEY_LAST_BACKGROUND_TIME, 0L)?.apply()
     }
@@ -115,6 +127,8 @@ object AppLockManager {
                     lockSalt = salt,
                     isLockEnabled = true,
                     isBiometricEnabled = isBiometricEnabled,
+                    isFaceAuthEnabled = isFaceAuthEnabled,
+                    isFingerprintAuthEnabled = isFingerprintAuthEnabled,
                     lockTimeoutMs = lockTimeoutMs
                 )
             }
@@ -143,6 +157,60 @@ object AppLockManager {
                     lockSalt = user.lockSalt,
                     isLockEnabled = isLockEnabled,
                     isBiometricEnabled = enabled,
+                    isFaceAuthEnabled = isFaceAuthEnabled,
+                    isFingerprintAuthEnabled = isFingerprintAuthEnabled,
+                    lockTimeoutMs = lockTimeoutMs
+                )
+            }
+        }
+    }
+
+    fun setFaceAuth(enabled: Boolean) {
+        isFaceAuthEnabled = enabled
+        isBiometricEnabled = enabled || isFingerprintAuthEnabled
+        val user = AuthManager.currentUser
+        if (user != null && appContext != null) {
+            AuthManager.currentUser = user.copy(
+                isFaceAuthEnabled = enabled,
+                isBiometricEnabled = isBiometricEnabled
+            )
+            CoroutineScope(Dispatchers.IO).launch {
+                val dao = AppDatabase.getInstance(appContext!!).userDao()
+                dao.updateUserLock(
+                    userId = user.id,
+                    lockType = currentLockType.id,
+                    lockHash = user.lockHash,
+                    lockSalt = user.lockSalt,
+                    isLockEnabled = isLockEnabled,
+                    isBiometricEnabled = isBiometricEnabled,
+                    isFaceAuthEnabled = enabled,
+                    isFingerprintAuthEnabled = isFingerprintAuthEnabled,
+                    lockTimeoutMs = lockTimeoutMs
+                )
+            }
+        }
+    }
+
+    fun setFingerprintAuth(enabled: Boolean) {
+        isFingerprintAuthEnabled = enabled
+        isBiometricEnabled = enabled || isFaceAuthEnabled
+        val user = AuthManager.currentUser
+        if (user != null && appContext != null) {
+            AuthManager.currentUser = user.copy(
+                isFingerprintAuthEnabled = enabled,
+                isBiometricEnabled = isBiometricEnabled
+            )
+            CoroutineScope(Dispatchers.IO).launch {
+                val dao = AppDatabase.getInstance(appContext!!).userDao()
+                dao.updateUserLock(
+                    userId = user.id,
+                    lockType = currentLockType.id,
+                    lockHash = user.lockHash,
+                    lockSalt = user.lockSalt,
+                    isLockEnabled = isLockEnabled,
+                    isBiometricEnabled = isBiometricEnabled,
+                    isFaceAuthEnabled = isFaceAuthEnabled,
+                    isFingerprintAuthEnabled = enabled,
                     lockTimeoutMs = lockTimeoutMs
                 )
             }
@@ -152,6 +220,8 @@ object AppLockManager {
     fun disableLock() {
         isLockEnabled = false
         isBiometricEnabled = false
+        isFaceAuthEnabled = false
+        isFingerprintAuthEnabled = false
         isLocked = false
         lastBackgroundTimestamp = 0L
         prefs?.edit()?.putLong(KEY_LAST_BACKGROUND_TIME, 0L)?.apply()
@@ -161,6 +231,8 @@ object AppLockManager {
             AuthManager.currentUser = user.copy(
                 isLockEnabled = false,
                 isBiometricEnabled = false,
+                isFaceAuthEnabled = false,
+                isFingerprintAuthEnabled = false,
                 lockHash = null,
                 lockSalt = null
             )
@@ -173,6 +245,8 @@ object AppLockManager {
                     lockSalt = null,
                     isLockEnabled = false,
                     isBiometricEnabled = false,
+                    isFaceAuthEnabled = false,
+                    isFingerprintAuthEnabled = false,
                     lockTimeoutMs = lockTimeoutMs
                 )
             }
@@ -205,6 +279,8 @@ object AppLockManager {
                     lockSalt = user.lockSalt,
                     isLockEnabled = isLockEnabled,
                     isBiometricEnabled = isBiometricEnabled,
+                    isFaceAuthEnabled = isFaceAuthEnabled,
+                    isFingerprintAuthEnabled = isFingerprintAuthEnabled,
                     lockTimeoutMs = timeoutMs
                 )
             }

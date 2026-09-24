@@ -27,6 +27,12 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import com.example.todo_list.ui.components.CreateTaskBottomSheet
 import com.example.todo_list.ui.components.EditTaskBottomSheet
 import com.example.todo_list.ui.components.ai.TaskFlowIntelligenceSheet
+import com.example.todo_list.ui.components.navigation.TFTabBar
+import com.example.todo_list.ui.components.navigation.TFLargeTitleNavBar
+import com.example.todo_list.ui.components.primitives.TFCardGroup
+import com.example.todo_list.ui.components.primitives.TFGroupDivider
+import com.example.todo_list.ui.components.primitives.TFTaskRow
+import com.example.todo_list.ui.components.primitives.TFEmptyState
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AccessTime
@@ -214,116 +220,102 @@ fun HomeScreen(
         Scaffold(
             topBar = {
                 if (selectedTab == 0) {
-                    HeaderBar(
+                    TFLargeTitleNavBar(
+                        title = "Tasks",
                         avatarUrl = avatarUrl,
                         searchQuery = searchQuery,
                         onSearchQueryChange = { searchQuery = it },
-                        onAddTaskClick = { showAddTaskSheet = true },
-                        onProfileClick = { showProfileScreen = true },
-                        onIntelligenceClick = { showIntelligenceSheet = true }
+                        onAvatarClick = { showProfileScreen = true },
+                        onSparkleClick = { showIntelligenceSheet = true }
                     )
                 }
             },
-        floatingActionButton = {
-            if (selectedTab == 0) {
-                FloatingActionButton(
-                    onClick = {
-                        HapticManager.performClick(context)
+            bottomBar = {
+                TFTabBar(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it },
+                    onPlusClick = {
+                        prefilledTaskCategory = null
                         showAddTaskSheet = true
-                    },
-                    containerColor = SystemBlue,
-                    contentColor = Color.White,
-                    shape = CircleShape,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Add Task",
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-            }
-        },
-        bottomBar = {
-            BottomNavigationBar(
-                selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it }
-            )
-        },
-        containerColor = SystemGroupedBackground
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            when (selectedTab) {
-            0 -> {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        top = innerPadding.calculateTopPadding() + 12.dp,
-                        bottom = innerPadding.calculateBottomPadding() + 88.dp,
-                        start = 16.dp,
-                        end = 16.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item(key = "status_bento") {
-                        StatusBentoCard(
-                            remainingTasks = remainingTasks,
-                            progressRatio = progressRatio
-                        )
                     }
+                )
+            },
+            containerColor = TFTheme.colors.canvas
+        ) { innerPadding ->
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (selectedTab) {
+                0 -> {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            top = innerPadding.calculateTopPadding() + 8.dp,
+                            bottom = innerPadding.calculateBottomPadding() + 24.dp,
+                            start = 16.dp,
+                            end = 16.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        item(key = "status_bento") {
+                            StatusBentoCard(
+                                remainingTasks = remainingTasks,
+                                progressRatio = progressRatio
+                            )
+                        }
 
-                    item(key = "intelligence_insight") {
-                        IntelligenceInsightCard(
-                            pendingTasksCount = remainingTasks,
-                            onOptimizeClick = {
-                                HapticManager.performClick(context)
-                                showIntelligenceSheet = true
-                            }
-                        )
-                    }
+                        item(key = "intelligence_insight") {
+                            IntelligenceInsightCard(
+                                pendingTasksCount = remainingTasks,
+                                onOptimizeClick = {
+                                    HapticManager.performClick(context)
+                                    showIntelligenceSheet = true
+                                }
+                            )
+                        }
 
-                    item(key = "todays_tasks_header") {
-                        TodaysTasksHeader(
-                            totalCount = filteredTaskList.size,
-                            onViewAllClick = { showViewAllSheet = true }
-                        )
-                    }
+                        item(key = "todays_tasks_header") {
+                            TodaysTasksHeader(
+                                totalCount = filteredTaskList.size,
+                                onViewAllClick = { showViewAllSheet = true }
+                            )
+                        }
 
-                    item(key = "tasks_grouped_card") {
-                        // iOS Inset Grouped List Card
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = SystemSurface,
-                            border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                if (filteredTaskList.isEmpty()) {
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(32.dp)
-                                    ) {
-                                        Text(
-                                            text = "No tasks found",
-                                            fontSize = 15.sp,
-                                            color = SystemLabelSecondary
+                        item(key = "tasks_grouped_card") {
+                            if (filteredTaskList.isEmpty()) {
+                                TFCardGroup {
+                                    if (searchQuery.isNotBlank()) {
+                                        TFEmptyState(
+                                            headline = "No results for \"$searchQuery\"",
+                                            body = "Try another keyword or clear filters.",
+                                            ctaText = "Clear Filters",
+                                            onCtaClick = { searchQuery = "" }
+                                        )
+                                    } else {
+                                        TFEmptyState(
+                                            headline = "You're all clear",
+                                            body = "Nothing due today. Add a task or start with an idea.",
+                                            ctaText = "Add Task",
+                                            onCtaClick = { showAddTaskSheet = true },
+                                            starterChips = listOf("Plan tomorrow", "Weekly review", "Groceries"),
+                                            onChipClick = { chipText ->
+                                                prefilledTaskCategory = "Personal"
+                                                showAddTaskSheet = true
+                                            }
                                         )
                                     }
-                                } else {
+                                }
+                            } else {
+                                TFCardGroup {
                                     filteredTaskList.forEachIndexed { index, task ->
                                         key(task.id) {
-                                            TaskCardItem(
+                                            TFTaskRow(
                                                 task = task,
-                                                showDivider = index < filteredTaskList.size - 1,
                                                 onToggleComplete = onToggleCompleteHelper,
-                                                onEditTask = { taskToEdit ->
-                                                    editingTask = taskToEdit
-                                                },
-                                                onDelete = onDeleteHelper
+                                                onClick = { editingTask = task }
                                             )
+                                            if (index < filteredTaskList.size - 1) {
+                                                TFGroupDivider()
+                                            }
                                         }
                                     }
                                 }
@@ -331,7 +323,6 @@ fun HomeScreen(
                         }
                     }
                 }
-            }
             1 -> CalendarScreen(
                 taskList = taskList,
                 categoriesList = categoriesList,
@@ -515,18 +506,22 @@ fun IntelligenceInsightCard(
     pendingTasksCount: Int,
     onOptimizeClick: () -> Unit
 ) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = SystemSurface,
-        border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+    val colors = TFTheme.colors
+    val accentRoles = TFTheme.accentRoles
+    val typography = TFTheme.typography
+    val shape = TFShape.card
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
+            .background(colors.card)
+            .border(hairline(), accentRoles.accent.copy(alpha = 0.30f), shape)
             .clickable { onOptimizeClick() }
+            .padding(14.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -537,16 +532,16 @@ fun IntelligenceInsightCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(36.dp)
                         .clip(CircleShape)
-                        .background(Color(0x1A007AFF)),
+                        .background(accentRoles.accentContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = "TaskFlow Intelligence",
-                        tint = SystemBlue,
-                        modifier = Modifier.size(22.dp)
+                        tint = accentRoles.accent,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -557,32 +552,18 @@ fun IntelligenceInsightCard(
                     ) {
                         Text(
                             text = "TaskFlow Intelligence",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SystemLabelPrimary
+                            style = typography.headline,
+                            color = colors.labelPrimary
                         )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0x1A007AFF))
-                                .padding(horizontal = 5.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                text = "AI",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = SystemBlue
-                            )
-                        }
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = if (pendingTasksCount > 0)
                             "Auto-prioritize & optimize your $pendingTasksCount pending tasks"
                         else
-                            "Daily schedule planned • Tap to ask questions",
-                        fontSize = 13.sp,
-                        color = SystemLabelSecondary,
+                            "Daily schedule balanced • Tap to optimize",
+                        style = typography.footnote,
+                        color = colors.labelSecondary,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
@@ -590,10 +571,10 @@ fun IntelligenceInsightCard(
             }
 
             Text(
-                text = "Plan ➔",
-                fontSize = 13.sp,
+                text = "Plan ›",
+                style = typography.subheadline,
                 fontWeight = FontWeight.SemiBold,
-                color = SystemBlue
+                color = accentRoles.accentText
             )
         }
     }
@@ -753,68 +734,89 @@ fun StatusBentoCard(
     remainingTasks: Int,
     progressRatio: Float
 ) {
+    val colors = TFTheme.colors
+    val accentRoles = TFTheme.accentRoles
+    val typography = TFTheme.typography
+
     val animatedProgress by animateFloatAsState(
         targetValue = progressRatio,
-        animationSpec = tween(durationMillis = 800),
+        animationSpec = TFMotion.standard(),
         label = "ProgressAnimation"
     )
 
     val dateFormat = remember { SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()) }
     val currentDateStr = remember { dateFormat.format(Date()) }
 
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = SystemSurface,
-        border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
-        modifier = Modifier.fillMaxWidth()
+    val shape = TFShape.card
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(colors.card)
+            .then(
+                if (colors.isDark) {
+                    Modifier.border(hairline(), colors.cardStroke, shape)
+                } else {
+                    Modifier
+                }
+            )
+            .padding(16.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (remainingTasks == 0) "All tasks completed!" else "$remainingTasks tasks left for today",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SystemLabelPrimary
+                    text = "Today",
+                    style = typography.headline,
+                    color = colors.labelPrimary
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = currentDateStr,
-                    fontSize = 14.sp,
-                    color = SystemLabelSecondary
+                    style = typography.subheadline,
+                    color = colors.labelSecondary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (remainingTasks == 0 && progressRatio > 0f) "All done 🎉" else "$remainingTasks remaining",
+                    style = typography.title1,
+                    color = if (remainingTasks == 0 && progressRatio > 0f) colors.green else accentRoles.accent
                 )
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            // 72dp Animated Circular Progress Ring
+            Box(
+                modifier = Modifier.size(72.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .width(70.dp)
-                        .height(6.dp)
-                        .clip(CircleShape)
-                        .background(SystemGray6)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(animatedProgress)
-                            .clip(CircleShape)
-                            .background(SystemBlue)
+                Canvas(modifier = Modifier.size(72.dp)) {
+                    val strokeWidth = 8.dp.toPx()
+                    // Track
+                    drawArc(
+                        color = accentRoles.accent.copy(alpha = 0.15f),
+                        startAngle = -90f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                    )
+                    // Progress Arc
+                    drawArc(
+                        color = if (remainingTasks == 0 && progressRatio > 0f) colors.green else accentRoles.accent,
+                        startAngle = -90f,
+                        sweepAngle = animatedProgress * 360f,
+                        useCenter = false,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                     )
                 }
 
                 Text(
                     text = "${(animatedProgress * 100).toInt()}%",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SystemBlue
+                    style = typography.footnote,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.labelPrimary
                 )
             }
         }

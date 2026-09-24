@@ -104,7 +104,8 @@ class TaskFlowColors(
     val searchInputBackground: Color,
     val systemDivider: Color,
     val systemRed: Color,
-    val systemGreen: Color
+    val systemGreen: Color,
+    val cardStroke: Color = if (isDark) Color(0x8C545458) else Color.Transparent
 )
 
 fun getAppleColors(isDark: Boolean, accent: AppAccentColor = AppAccentColor.BLUE): TaskFlowColors {
@@ -122,7 +123,7 @@ fun getAppleColors(isDark: Boolean, accent: AppAccentColor = AppAccentColor.BLUE
             systemSurface = Color(0xFF1C1C1E),           // iOS Dark Inset Card Surface (#1C1C1E)
             systemSurfaceSecondary = Color(0xFF2C2C2E),  // iOS Dark Secondary Elevated Surface (#2C2C2E)
             systemLabelPrimary = Color(0xFFFFFFFF),      // Primary White Text
-            systemLabelSecondary = Color(0x99EBEBF5),    // 60% Secondary White Text
+            systemLabelSecondary = Color(0x99EBEBF5),    // 60% Secondary White Text (~5.9:1)
             systemLabelTertiary = Color(0x4DEBEBF5),     // 30% Tertiary Text
             systemGray = Color(0xFF8E8E93),
             systemGray2 = Color(0xFF636366),
@@ -131,7 +132,8 @@ fun getAppleColors(isDark: Boolean, accent: AppAccentColor = AppAccentColor.BLUE
             searchInputBackground = Color(0x3D767680),   // 24% fill for search bar
             systemDivider = Color(0x54545865),           // iOS Dark Divider
             systemRed = Color(0xFFFF453A),               // iOS Dark System Red
-            systemGreen = Color(0xFF30D158)              // iOS Dark System Green
+            systemGreen = Color(0xFF30D158),             // iOS Dark System Green
+            cardStroke = Color(0x8C545458)               // 1px border (#545458 @ 55%) to prevent blending
         )
     } else {
         TaskFlowColors(
@@ -143,8 +145,8 @@ fun getAppleColors(isDark: Boolean, accent: AppAccentColor = AppAccentColor.BLUE
             systemSurface = Color(0xFFFFFFFF),           // iOS Light Card Surface
             systemSurfaceSecondary = Color(0xFFF9F9FB),  // Subtle Secondary Card Fill
             systemLabelPrimary = Color(0xFF000000),      // Primary Black Text
-            systemLabelSecondary = Color(0x993C3C43),    // 60% Secondary Text
-            systemLabelTertiary = Color(0x4D3C3C43),     // 30% Tertiary Text
+            systemLabelSecondary = Color(0xB83C3C43),    // 72% Secondary Text (~4.7:1 AA contrast)
+            systemLabelTertiary = Color(0x4D3C3C43),     // 30% Tertiary Text (decorative only)
             systemGray = Color(0xFF8E8E93),
             systemGray2 = Color(0xFFAEAEB2),
             systemGray5 = Color(0xFFE5E5EA),
@@ -152,7 +154,8 @@ fun getAppleColors(isDark: Boolean, accent: AppAccentColor = AppAccentColor.BLUE
             searchInputBackground = Color(0x1F767680),   // 12% Search Bar Fill
             systemDivider = Color(0x4A3C3C43),           // 29% Inset Divider
             systemRed = Color(0xFFFF3B30),
-            systemGreen = Color(0xFF34C759)
+            systemGreen = Color(0xFF34C759),
+            cardStroke = Color.Transparent               // Light cards have flat white fill, no border
         )
     }
 }
@@ -161,6 +164,9 @@ val AppleLightColors = getAppleColors(isDark = false, accent = AppAccentColor.BL
 val AppleDarkColors = getAppleColors(isDark = true, accent = AppAccentColor.BLUE)
 
 val LocalTaskFlowColors = staticCompositionLocalOf { AppleLightColors }
+
+val CardStroke: Color
+    @Composable @ReadOnlyComposable get() = LocalTaskFlowColors.current.cardStroke
 
 // Dynamic Composable Color Token Accessors
 val SystemBlue: Color

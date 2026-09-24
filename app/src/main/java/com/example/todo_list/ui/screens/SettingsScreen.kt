@@ -630,56 +630,95 @@ fun SettingsScreen(
                         )
 
                         if (AppLockManager.isLockEnabled) {
-                            val bioDisplayName = BiometricAuthHelper.getBiometricDisplayName(context)
-                            val bioIcon = BiometricAuthHelper.getBiometricIcon(context)
-                            SettingsSwitchRow(
-                                icon = bioIcon,
-                                iconTint = AppleHealth,
-                                title = "Unlock with $bioDisplayName",
-                                subtitle = BiometricAuthHelper.getBiometricSettingsSubtitle(context, AppLockManager.isBiometricEnabled),
-                                checked = AppLockManager.isBiometricEnabled,
-                                accentColor = SystemBlue,
-                                onCheckedChange = { isChecked ->
-                                    if (isChecked) {
-                                        val status = BiometricAuthHelper.checkBiometricAvailability(context)
-                                        when (status) {
-                                            BiometricAvailability.AVAILABLE -> {
-                                                val activity = context as? FragmentActivity
-                                                if (activity != null) {
-                                                    BiometricAuthHelper.promptBiometric(
-                                                        activity = activity,
-                                                        title = "Set Up $bioDisplayName",
-                                                        subtitle = BiometricAuthHelper.getBiometricSetupSubtitle(context),
-                                                        negativeButtonText = "Cancel",
-                                                        onSuccess = {
-                                                            AppLockManager.setBiometricAuth(true)
-                                                            Toast.makeText(context, "$bioDisplayName unlock enabled", Toast.LENGTH_SHORT).show()
-                                                        },
-                                                        onError = { err ->
-                                                            Toast.makeText(context, "Setup canceled: $err", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    )
-                                                } else {
-                                                    AppLockManager.setBiometricAuth(true)
+                            // Face Authentication Toggle
+                            if (BiometricAuthHelper.isFaceAuthAvailable(context)) {
+                                SettingsSwitchRow(
+                                    icon = BiometricAuthHelper.getFaceIcon(),
+                                    iconTint = AppleHealth,
+                                    title = "Unlock with Face ID",
+                                    subtitle = if (AppLockManager.isFaceAuthEnabled) {
+                                        "Detects your face via camera automatically on app open"
+                                    } else {
+                                        "Detect your face via camera instead of passcode"
+                                    },
+                                    checked = AppLockManager.isFaceAuthEnabled,
+                                    accentColor = SystemBlue,
+                                    onCheckedChange = { isChecked ->
+                                        if (isChecked) {
+                                            val hasCam = androidx.core.content.ContextCompat.checkSelfPermission(
+                                                context,
+                                                android.Manifest.permission.CAMERA
+                                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                            AppLockManager.setFaceAuth(true)
+                                            if (!hasCam) {
+                                                Toast.makeText(context, "Face lock enabled. Camera permission will be requested on first scan.", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                Toast.makeText(context, "Face lock enabled (starts camera automatically on open)", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            AppLockManager.setFaceAuth(false)
+                                            Toast.makeText(context, "Face lock disabled", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    showDivider = true
+                                )
+                            }
+
+                            // Fingerprint Authentication Toggle
+                            if (BiometricAuthHelper.isFingerprintAuthAvailable(context)) {
+                                SettingsSwitchRow(
+                                    icon = BiometricAuthHelper.getFingerprintIcon(),
+                                    iconTint = AppleHealth,
+                                    title = "Unlock with Fingerprint",
+                                    subtitle = if (AppLockManager.isFingerprintAuthEnabled) {
+                                        "Fingerprint enabled for instant app unlock"
+                                    } else {
+                                        "Use fingerprint instead of passcode"
+                                    },
+                                    checked = AppLockManager.isFingerprintAuthEnabled,
+                                    accentColor = SystemBlue,
+                                    onCheckedChange = { isChecked ->
+                                        if (isChecked) {
+                                            val status = BiometricAuthHelper.checkBiometricAvailability(context)
+                                            when (status) {
+                                                BiometricAvailability.AVAILABLE -> {
+                                                    val activity = context as? FragmentActivity
+                                                    if (activity != null) {
+                                                        BiometricAuthHelper.promptFingerprintAuth(
+                                                            activity = activity,
+                                                            title = "Set Up Fingerprint",
+                                                            subtitle = "Scan your fingerprint to enable biometric unlock",
+                                                            negativeButtonText = "Cancel",
+                                                            onSuccess = {
+                                                                AppLockManager.setFingerprintAuth(true)
+                                                                Toast.makeText(context, "Fingerprint unlock enabled", Toast.LENGTH_SHORT).show()
+                                                            },
+                                                            onError = { err ->
+                                                                Toast.makeText(context, "Setup canceled: $err", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        )
+                                                    } else {
+                                                        AppLockManager.setFingerprintAuth(true)
+                                                    }
+                                                }
+                                                BiometricAvailability.NOT_ENROLLED -> {
+                                                    showEnrollBiometricDialog = true
+                                                }
+                                                BiometricAvailability.NO_HARDWARE -> {
+                                                    Toast.makeText(context, "No fingerprint hardware found on this device", Toast.LENGTH_SHORT).show()
+                                                }
+                                                BiometricAvailability.HW_UNAVAILABLE -> {
+                                                    Toast.makeText(context, "Fingerprint sensor is currently unavailable", Toast.LENGTH_SHORT).show()
                                                 }
                                             }
-                                            BiometricAvailability.NOT_ENROLLED -> {
-                                                showEnrollBiometricDialog = true
-                                            }
-                                            BiometricAvailability.NO_HARDWARE -> {
-                                                Toast.makeText(context, "No biometric hardware found on this device", Toast.LENGTH_SHORT).show()
-                                            }
-                                            BiometricAvailability.HW_UNAVAILABLE -> {
-                                                Toast.makeText(context, "Biometric sensor is currently unavailable", Toast.LENGTH_SHORT).show()
-                                            }
+                                        } else {
+                                            AppLockManager.setFingerprintAuth(false)
+                                            Toast.makeText(context, "Fingerprint unlock disabled", Toast.LENGTH_SHORT).show()
                                         }
-                                    } else {
-                                        AppLockManager.setBiometricAuth(false)
-                                        Toast.makeText(context, "$bioDisplayName unlock disabled", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                showDivider = true
-                            )
+                                    },
+                                    showDivider = true
+                                )
+                            }
 
                             SettingsValueRow(
                                 icon = Icons.Outlined.Fingerprint,
@@ -723,7 +762,7 @@ fun SettingsScreen(
                         }
                     }
 
-                    if (AppLockManager.isLockEnabled && AppLockManager.isBiometricEnabled) {
+                    if (AppLockManager.isLockEnabled && (AppLockManager.isFaceAuthEnabled || AppLockManager.isFingerprintAuthEnabled)) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -743,7 +782,7 @@ fun SettingsScreen(
                                     modifier = Modifier.size(18.dp).padding(top = 1.dp)
                                 )
                                 Text(
-                                    text = "Biometrics verify against fingerprints and Face ID registered in this device's Android Settings. If sharing this device, enroll additional fingers in System Settings, or protect your account with an App PIN.",
+                                    text = "Unlock Priority: 1. Face lock (direct camera detection on open) → 2. Fingerprint (fallback if undetected or declined) → 3. Manual PIN entry.",
                                     fontSize = 13.sp,
                                     color = SystemLabelSecondary,
                                     lineHeight = 18.sp
@@ -1709,10 +1748,11 @@ fun SectionHeaderTitle(title: String) {
 
 @Composable
 fun SettingsGroupCard(content: @Composable ColumnScope.() -> Unit) {
+    val colors = TFTheme.colors
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = SystemSurface,
-        border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+        shape = TFShape.card,
+        color = colors.card,
+        border = if (colors.isDark) androidx.compose.foundation.BorderStroke(hairline(), colors.cardStroke) else null,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -1792,8 +1832,8 @@ fun SettingsSwitchRow(
 
         if (showDivider) {
             HorizontalDivider(
-                color = SystemDivider,
-                thickness = 0.5.dp,
+                color = TFTheme.colors.separator,
+                thickness = hairline(),
                 modifier = Modifier.padding(start = 56.dp)
             )
         }
@@ -1860,8 +1900,8 @@ fun SettingsValueRow(
 
         if (showDivider) {
             HorizontalDivider(
-                color = SystemDivider,
-                thickness = 0.5.dp,
+                color = TFTheme.colors.separator,
+                thickness = hairline(),
                 modifier = Modifier.padding(start = 56.dp)
             )
         }
@@ -1932,8 +1972,8 @@ fun SettingsActionRow(
 
         if (showDivider) {
             HorizontalDivider(
-                color = SystemDivider,
-                thickness = 0.5.dp,
+                color = TFTheme.colors.separator,
+                thickness = hairline(),
                 modifier = Modifier.padding(start = 56.dp)
             )
         }
