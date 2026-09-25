@@ -63,6 +63,12 @@ class MainActivity : FragmentActivity() {
         // Initialize persistent TaskFlow Intelligence AI state
         com.example.todo_list.ai.AiConfigurationManager.initialize(this)
 
+        // Initialize persistent Floating AI Shortcut Button state & service
+        com.example.todo_list.ai.FloatingAiButtonManager.initialize(this)
+
+        // Handle direct AI shortcut intent from floating assistant
+        handleAiChatIntent(intent)
+
         // Enforce 120Hz high refresh rate display mode & prevent OS throttling
         com.example.todo_list.utils.HighRefreshRateManager.enableHighRefreshRate(this)
 
@@ -79,6 +85,7 @@ class MainActivity : FragmentActivity() {
                 Lifecycle.Event.ON_RESUME -> {
                     com.example.todo_list.utils.HighRefreshRateManager.onResume(this)
                     com.example.todo_list.manager.TimePreferencesManager.detectUserTimezone(this, forceNotify = false)
+                    com.example.todo_list.ai.FloatingAiButtonManager.syncService(this)
                 }
                 else -> Unit
             }
@@ -150,4 +157,22 @@ class MainActivity : FragmentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAiChatIntent(intent)
+    }
+
+    private fun handleAiChatIntent(intent: android.content.Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_OPEN_AI_CHAT, false) == true) {
+            openAiChatTrigger.value = System.currentTimeMillis()
+        }
+    }
+
+    companion object {
+        const val EXTRA_OPEN_AI_CHAT = "extra_open_ai_chat"
+        val openAiChatTrigger = androidx.compose.runtime.mutableStateOf<Long?>(null)
+    }
 }
+

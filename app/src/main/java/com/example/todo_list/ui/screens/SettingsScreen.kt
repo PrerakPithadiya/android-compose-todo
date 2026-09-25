@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import com.example.todo_list.ai.AiConfigurationManager
+import com.example.todo_list.ai.FloatingAiButtonManager
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -122,6 +123,7 @@ fun SettingsScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
     var showTimezonePickerSheet by remember { mutableStateOf(false) }
+    var showOverlayPermissionDialog by remember { mutableStateOf(false) }
 
     val totalTasks = remember(taskList) { taskList.size }
     val completedCount = remember(taskList) { taskList.count { it.isCompleted } }
@@ -577,6 +579,41 @@ fun SettingsScreen(
                             accentColor = SystemBlue,
                             onCheckedChange = { isChecked ->
                                 AiConfigurationManager.isHeuristicFallbackEnabled = isChecked
+                            },
+                            showDivider = true
+                        )
+
+                        // Floating AI Assistant Shortcut Toggle (Always-accessible purple button over all apps)
+                        val isFloatingActive = FloatingAiButtonManager.isFloatingEnabled
+                        val hasOverlayPermission = remember(isFloatingActive) {
+                            FloatingAiButtonManager.canDrawOverlays(context)
+                        }
+
+                        SettingsSwitchRow(
+                            icon = Icons.Default.AutoAwesome,
+                            iconTint = ApplePersonal,
+                            title = "Floating AI Assistant",
+                            subtitle = if (isFloatingActive) {
+                                if (hasOverlayPermission) {
+                                    "Active across all apps (WhatsApp, Home). Tap to chat anytime."
+                                } else {
+                                    "Display over other apps permission needed for WhatsApp"
+                                }
+                            } else {
+                                "Edge-docked purple button to chat and create tasks anytime"
+                            },
+                            checked = isFloatingActive,
+                            accentColor = ApplePersonal,
+                            onCheckedChange = { isChecked ->
+                                if (isChecked) {
+                                    if (!FloatingAiButtonManager.canDrawOverlays(context)) {
+                                        showOverlayPermissionDialog = true
+                                    } else {
+                                        FloatingAiButtonManager.setFloatingEnabled(context, true)
+                                    }
+                                } else {
+                                    FloatingAiButtonManager.setFloatingEnabled(context, false)
+                                }
                             },
                             showDivider = true
                         )
@@ -1401,6 +1438,73 @@ fun SettingsScreen(
             shape = RoundedCornerShape(16.dp)
         )
     }
+
+    // Permission Dialog: Display Over Other Apps for Floating AI Assistant
+    if (showOverlayPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showOverlayPermissionDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = ApplePersonal,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = "Display Over Other Apps",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SystemLabelPrimary
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = "To keep the purple AI shortcut accessible across your whole phone (such as while using WhatsApp or browsing), TaskFlow requires the 'Display over other apps' system permission.",
+                    fontSize = 14.sp,
+                    color = SystemLabelSecondary,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        FloatingAiButtonManager.setFloatingEnabled(context, true)
+                        showOverlayPermissionDialog = false
+                        try {
+                            val intent = android.content.Intent(
+                                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                android.net.Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            val fallbackIntent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                            context.startActivity(fallbackIntent)
+                        }
+                    }
+                ) {
+                    Text(text = "Open Settings", color = ApplePersonal, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        FloatingAiButtonManager.setFloatingEnabled(context, true)
+                        showOverlayPermissionDialog = false
+                    }
+                ) {
+                    Text(text = "Use In-App Only", color = SystemLabelSecondary)
+                }
+            },
+            containerColor = SystemSurface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
 
     // Confirmation Dialog: Log Out
     if (showLogoutDialog) {

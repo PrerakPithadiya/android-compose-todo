@@ -141,6 +141,16 @@ fun HomeScreen(
     var prefilledTaskCategory by remember { mutableStateOf<String?>(null) }
     var showTimezonePickerSheet by remember { mutableStateOf(false) }
     var showIntelligenceSheet by remember { mutableStateOf(false) }
+    var intelligenceInitialTab by remember { mutableIntStateOf(0) }
+    val aiShortcutTrigger by com.example.todo_list.MainActivity.openAiChatTrigger
+
+    LaunchedEffect(aiShortcutTrigger) {
+        if (aiShortcutTrigger != null) {
+            intelligenceInitialTab = 2
+            showIntelligenceSheet = true
+            com.example.todo_list.MainActivity.openAiChatTrigger.value = null
+        }
+    }
 
     val onToggleCompleteHelper: (TaskItem) -> Unit = remember(context, taskRepository, coroutineScope) {
         { toggledTask: TaskItem ->
@@ -226,7 +236,10 @@ fun HomeScreen(
                         searchQuery = searchQuery,
                         onSearchQueryChange = { searchQuery = it },
                         onAvatarClick = { showProfileScreen = true },
-                        onSparkleClick = { showIntelligenceSheet = true }
+                        onSparkleClick = {
+                            intelligenceInitialTab = 0
+                            showIntelligenceSheet = true
+                        }
                     )
                 }
             },
@@ -268,6 +281,7 @@ fun HomeScreen(
                                 pendingTasksCount = remainingTasks,
                                 onOptimizeClick = {
                                     HapticManager.performClick(context)
+                                    intelligenceInitialTab = 0
                                     showIntelligenceSheet = true
                                 }
                             )
@@ -476,7 +490,11 @@ fun HomeScreen(
         TaskFlowIntelligenceSheet(
             tasks = taskList,
             categories = categoriesList,
-            onDismiss = { showIntelligenceSheet = false },
+            initialTab = intelligenceInitialTab,
+            onDismiss = {
+                showIntelligenceSheet = false
+                intelligenceInitialTab = 0
+            },
             onApplySchedule = { slots ->
                 coroutineScope.launch {
                     val todayEpoch = System.currentTimeMillis() / (1000 * 60 * 60 * 24)
@@ -499,7 +517,20 @@ fun HomeScreen(
             }
         )
     }
+
+    // In-App Floating AI Assistant Shortcut Button (Active when enabled without system overlay)
+    val isFloatingAiActive = com.example.todo_list.ai.FloatingAiButtonManager.isFloatingEnabled
+    val hasSystemOverlay = remember(isFloatingAiActive) {
+        com.example.todo_list.ai.FloatingAiButtonManager.canDrawOverlays(context)
+    }
+    if (isFloatingAiActive && !hasSystemOverlay) {
+        com.example.todo_list.ui.components.ai.InAppFloatingAiButton {
+            intelligenceInitialTab = 2
+            showIntelligenceSheet = true
+        }
+    }
 }
+
 
 @Composable
 fun IntelligenceInsightCard(

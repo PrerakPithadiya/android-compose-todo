@@ -73,6 +73,35 @@ object TaskScheduleParser {
 
     private val CATEGORY_PATTERN = Pattern.compile("(?i)#([a-zA-Z0-9_-]+)")
 
+    private val TASK_INTENT_PREFIX_PATTERN = Pattern.compile(
+        "(?i)^(?:please\\s+)?(?:add(?:\\s+a)?(?:\\s+new)?\\s+task|create(?:\\s+a)?(?:\\s+new)?\\s+task|new\\s+task|remind\\s+me\\s+to|add\\s+to\\s+(?:my\\s+)?(?:list|tasks?)|schedule(?:\\s+a)?(?:\\s+meeting|\\s+task)?|todo:?)\\s*[:,-]?\\s*",
+        Pattern.CASE_INSENSITIVE
+    )
+
+    /**
+     * Determines whether the given user message expresses intent to create/schedule a new task.
+     */
+    fun isTaskCreationIntent(input: String): Boolean {
+        val trimmed = input.trim()
+        if (trimmed.isBlank()) return false
+        val matcher = TASK_INTENT_PREFIX_PATTERN.matcher(trimmed)
+        return matcher.find() && matcher.start() == 0
+    }
+
+    /**
+     * Strips leading command intent phrases (e.g. "Add task", "Remind me to", "New task:")
+     * so that only the semantic task title and attributes remain.
+     */
+    fun stripTaskIntentPrefix(input: String): String {
+        val trimmed = input.trim()
+        val matcher = TASK_INTENT_PREFIX_PATTERN.matcher(trimmed)
+        return if (matcher.find() && matcher.start() == 0) {
+            matcher.replaceFirst("").trim()
+        } else {
+            trimmed
+        }
+    }
+
     fun parse(
         input: String,
         is24Hour: Boolean = false,

@@ -1,6 +1,7 @@
 package com.example.todo_list.utils
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -69,4 +70,29 @@ class TaskScheduleParserTest {
         assertEquals("Work", result.suggestedCategory)
         assertEquals("Prepare pitch deck", result.cleanedTitle)
     }
+
+    @Test
+    fun testTaskCreationIntent_detection() {
+        assertTrue(TaskScheduleParser.isTaskCreationIntent("Add task Buy groceries tomorrow at 5pm"))
+        assertTrue(TaskScheduleParser.isTaskCreationIntent("create task Review proposal on Friday"))
+        assertTrue(TaskScheduleParser.isTaskCreationIntent("Remind me to call Dad tonight 8pm"))
+        assertTrue(TaskScheduleParser.isTaskCreationIntent("New task: Submit expense report"))
+        assertTrue(TaskScheduleParser.isTaskCreationIntent("Schedule meeting with dentist tomorrow 10am"))
+        assertTrue(TaskScheduleParser.isTaskCreationIntent("Todo: finish homework"))
+
+        // Pure schedule query or general questions should NOT be creation intent
+        assertFalse(TaskScheduleParser.isTaskCreationIntent("What are my tasks for today?"))
+        assertFalse(TaskScheduleParser.isTaskCreationIntent("Do I have any meetings tomorrow?"))
+        assertFalse(TaskScheduleParser.isTaskCreationIntent("How is my productivity this week?"))
+    }
+
+    @Test
+    fun testStripTaskIntentPrefix() {
+        assertEquals("Buy groceries tomorrow at 5pm", TaskScheduleParser.stripTaskIntentPrefix("Add task Buy groceries tomorrow at 5pm"))
+        assertEquals("Review proposal on Friday", TaskScheduleParser.stripTaskIntentPrefix("create task Review proposal on Friday"))
+        assertEquals("call Dad tonight 8pm", TaskScheduleParser.stripTaskIntentPrefix("Remind me to call Dad tonight 8pm"))
+        assertEquals("Submit expense report", TaskScheduleParser.stripTaskIntentPrefix("New task: Submit expense report"))
+        assertEquals("finish homework", TaskScheduleParser.stripTaskIntentPrefix("Todo: finish homework"))
+    }
 }
+

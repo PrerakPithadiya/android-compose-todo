@@ -124,8 +124,28 @@ TaskFlow is a modern, high-performance task management application for Android, 
   * Modular `CreateTaskBottomSheet` and `EditTaskBottomSheet` components with inline priority chips, time pickers, and category selectors.
   * Dedicated "Apple Intelligence & LLM" section in Settings with API key management, live connection test diagnostics, and model selection.
 
+### 🔮 12. Floating AI Assistant & Quick-Access Shortcut (Edge-Docked System Overlay)
+* **System-Wide Floating Shortcut Button (`SYSTEM_ALERT_WINDOW`)**:
+  * Persistent background service (`FloatingAiOverlayService`) rendering an Apple HIG purple gradient bubble (`#7C3AED` to `#A855F7`) with a glowing translucent border, elevation drop shadow, and crisp white AI sparkle icon (`ic_floating_ai_sparkle`).
+  * Floats seamlessly over any running app (such as WhatsApp, Chrome, YouTube, or Home Screen), allowing users to immediately trigger the TaskFlow AI assistant anytime from anywhere on their phone.
+* **Physical Spring-Back Border Snapping**:
+  * Draggable across 2D touch space with touch slop disambiguation and haptic feedback.
+  * Mathematical edge-docking solver (`FloatingAiButtonManager.calculateDockedTargetX`): when released, if the button center is left of the screen midpoint, it animates to the left border (`x = 0`); if right of the midpoint, it animates to the right border (`x = screenWidth - buttonWidth`).
+  * **Zero Center Resting**: The button strictly never remains in the center of the display and always snaps back to the phone's border with Apple-styled spring overshoot physics. Safe vertical margins protect the status bar and gesture navigation bar.
+* **Direct Chatbot Shortcut & Intent Routing**:
+  * Tapping the floating button immediately brings TaskFlow to the foreground with `EXTRA_OPEN_AI_CHAT`, automatically popping open `TaskFlowIntelligenceSheet` pre-selected to the **Ask AI** chatbot tab.
+* **Conversational Natural Language Task Creation**:
+  * Users can message the integrated AI using everyday natural language to instantly add tasks (e.g. *"Add task: Team standup tomorrow at 9am #work"*, *"Remind me to buy groceries tonight 6pm"*, *"New task: Finish quarterly report on Friday high priority"*).
+  * `TaskScheduleParser` detects creation intents, strips command prefixes, and extracts titles, dates, 12-hour AM/PM times, category tags, and Eisenhower priority markers.
+  * Directly inserts the task into the Room SQLite database, schedules exact alarm reminders with `TaskNotificationScheduler`, awards `+50 XP`, triggers success haptics, and posts an Apple-styled markdown confirmation card in the chat stream.
+* **In-App Compose Fallback**:
+  * An in-app draggable Compose edge button (`InAppFloatingAiButton`) rendered with `TFMotion` springs when the feature is enabled but system overlay permissions have not yet been granted.
+* **Settings Toggle & Onboarding Dialog**:
+  * Dedicated "Floating AI Assistant" switch under the Apple Intelligence card in Settings.
+  * Integrated Apple HIG dialog with 1-tap deep link to Android's `ACTION_MANAGE_OVERLAY_PERMISSION` screen and graceful in-app fallback.
 
 ---
+
 
 ## 🛠️ Technology Stack & Dependencies
 

@@ -60,6 +60,7 @@ import kotlinx.coroutines.launch
 fun TaskFlowIntelligenceSheet(
     tasks: List<TaskItem>,
     categories: List<TaskListCategory>,
+    initialTab: Int = 0,
     onDismiss: () -> Unit,
     onApplySchedule: (List<ScheduledTaskSlot>) -> Unit,
     onApplyPriorities: (Map<String, String>) -> Unit
@@ -67,8 +68,9 @@ fun TaskFlowIntelligenceSheet(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val profile = UserProfileManager.profile
+    val taskRepository = remember { com.example.todo_list.data.repository.TaskRepository.getInstance(context) }
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Plan, 1: Priorities, 2: Ask AI
+    var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab) } // 0: Plan, 1: Priorities, 2: Ask AI
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -211,12 +213,8 @@ fun TaskFlowIntelligenceSheet(
                                 }
                             }
                         )
-                        2 -> AskAiTabContent(
-                            messages = chatMessages,
-                            isThinking = isChatThinking,
-                            query = chatQuery,
-                            onQueryChange = { chatQuery = it },
-                            onSendQuery = { queryText ->
+                        2 -> {
+                            val handleUserQuery: (String) -> Unit = { queryText ->
                                 if (queryText.isNotBlank()) {
                                     val q = queryText.trim()
                                     chatQuery = ""
@@ -224,8 +222,53 @@ fun TaskFlowIntelligenceSheet(
                                     isChatThinking = true
                                     coroutineScope.launch {
                                         try {
-                                            val res = TaskFlowIntelligenceService.askAssistant(q, tasks, categories, profile)
-                                            chatMessages = chatMessages + ChatMessage(text = res.answer, isUser = false)
+                                            if (com.example.todo_list.utils.TaskScheduleParser.isTaskCreationIntent(q)) {
+                                                val cleanPrompt = com.example.todo_list.utils.TaskScheduleParser.stripTaskIntentPrefix(q)
+                                                val parsed = com.example.todo_list.utils.TaskScheduleParser.parse(
+                                                    cleanPrompt,
+                                                    is24Hour = false,
+                                                    knownCategories = categories.map { it.name }
+                                                )
+
+                                                val title = parsed.cleanedTitle.replaceFirstChar { it.uppercase() }
+                                                val category = parsed.suggestedCategory ?: categories.firstOrNull()?.name ?: "Personal"
+                                                val date = parsed.suggestedDate ?: "Today"
+                                                val time = parsed.suggestedTime ?: "09:00 AM"
+                                                val priorityStr = when (parsed.suggestedPriority?.uppercase()) {
+                                                    "HIGH" -> "HIGH"
+                                                    "LOW" -> "LOW"
+                                                    else -> "MEDIUM"
+                                                }
+
+                                                val newTask = TaskItem(
+                                                    id = java.util.UUID.randomUUID().toString(),
+                                                    title = title,
+                                                    category = category,
+                                                    date = date,
+                                                    time = time,
+                                                    priority = priorityStr,
+                                                    epochDay = parsed.suggestedEpochDay ?: (System.currentTimeMillis() / (1000 * 60 * 60 * 24)),
+                                                    userId = com.example.todo_list.security.AuthManager.currentUserId ?: ""
+                                                )
+
+                                                taskRepository.insertTask(newTask)
+                                                com.example.todo_list.notification.TaskNotificationScheduler.schedule(context, newTask)
+                                                UserProfileManager.addXp(50)
+                                                HapticManager.performSuccess(context)
+
+                                                val confirmationText = "✨ **Task Created Successfully!**\n\n" +
+                                                        "📌 **$title**\n" +
+                                                        "🗓️ **Date:** $date\n" +
+                                                        "⏰ **Time:** $time\n" +
+                                                        "📂 **Category:** $category\n" +
+                                                        "⚡ **Priority:** $priorityStr\n\n" +
+                                                        "Saved directly to your schedule."
+
+                                                chatMessages = chatMessages + ChatMessage(text = confirmationText, isUser = false)
+                                            } else {
+                                                val res = TaskFlowIntelligenceService.askAssistant(q, tasks, categories, profile)
+                                                chatMessages = chatMessages + ChatMessage(text = res.answer, isUser = false)
+                                            }
                                         } catch (e: Exception) {
                                             chatMessages = chatMessages + ChatMessage(text = "Could not process request: ${e.message}", isUser = false)
                                         } finally {
@@ -233,23 +276,20 @@ fun TaskFlowIntelligenceSheet(
                                         }
                                     }
                                 }
-                            },
-                            onChipClick = { chipText ->
-                                HapticManager.performClick(context)
-                                chatMessages = chatMessages + ChatMessage(text = chipText, isUser = true)
-                                isChatThinking = true
-                                coroutineScope.launch {
-                                    try {
-                                        val res = TaskFlowIntelligenceService.askAssistant(chipText, tasks, categories, profile)
-                                        chatMessages = chatMessages + ChatMessage(text = res.answer, isUser = false)
-                                    } catch (e: Exception) {
-                                        chatMessages = chatMessages + ChatMessage(text = "Could not process request: ${e.message}", isUser = false)
-                                    } finally {
-                                        isChatThinking = false
-                                    }
-                                }
                             }
-                        )
+
+                            AskAiTabContent(
+                                messages = chatMessages,
+                                isThinking = isChatThinking,
+                                query = chatQuery,
+                                onQueryChange = { chatQuery = it },
+                                onSendQuery = { handleUserQuery(it) },
+                                onChipClick = { chipText ->
+                                    HapticManager.performClick(context)
+                                    handleUserQuery(chipText)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -866,9 +906,10 @@ private fun AskAiTabContent(
     onChipClick: (String) -> Unit
 ) {
     val quickChips = listOf(
+        "Add task: Review proposal tomorrow 3pm #work",
+        "Remind me to buy groceries tonight 6pm",
         "What should I do next?",
         "Do I have any schedule conflicts?",
-        "Daily goal progress",
         "Top priority tasks"
     )
 
