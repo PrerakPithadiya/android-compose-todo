@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import com.example.todo_list.ai.AiConfigurationManager
 import com.example.todo_list.ai.FloatingAiButtonManager
+import com.example.todo_list.ui.components.ai.FloatingAiCustomizeSheet
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -103,6 +104,8 @@ fun SettingsScreen(
 
     // Customization & Appearance state
     val currentAppIcon = AppIconManager.currentAppIcon
+    val currentFloatingColor = FloatingAiButtonManager.selectedColor
+    val currentFloatingGlyph = FloatingAiButtonManager.selectedGlyph
     var compactModeEnabled by remember { mutableStateOf(false) }
 
     // Security & Data
@@ -124,6 +127,7 @@ fun SettingsScreen(
     var showStatsSheet by remember { mutableStateOf(false) }
     var showTimezonePickerSheet by remember { mutableStateOf(false) }
     var showOverlayPermissionDialog by remember { mutableStateOf(false) }
+    var showFloatingAiCustomizeSheet by remember { mutableStateOf(false) }
 
     val totalTasks = remember(taskList) { taskList.size }
     val completedCount = remember(taskList) { taskList.count { it.isCompleted } }
@@ -400,6 +404,18 @@ fun SettingsScreen(
                             showDivider = true
                         )
 
+                        SettingsValueRow(
+                            icon = currentFloatingGlyph.iconVector,
+                            iconTint = currentFloatingColor.startColor,
+                            title = "Floating AI Button",
+                            value = "${currentFloatingColor.displayName.split(" ").firstOrNull() ?: currentFloatingColor.displayName} • ${currentFloatingGlyph.displayName}",
+                            onClick = {
+                                HapticManager.performClick(context)
+                                showFloatingAiCustomizeSheet = true
+                            },
+                            showDivider = true
+                        )
+
                         SettingsSwitchRow(
                             icon = Icons.Outlined.DensityMedium,
                             iconTint = AppleStudy,
@@ -600,7 +616,7 @@ fun SettingsScreen(
                                     "Display over other apps permission needed for WhatsApp"
                                 }
                             } else {
-                                "Edge-docked purple button to chat and create tasks anytime"
+                                "Edge-docked shortcut to chat and create tasks anytime"
                             },
                             checked = isFloatingActive,
                             accentColor = ApplePersonal,
@@ -614,6 +630,19 @@ fun SettingsScreen(
                                 } else {
                                     FloatingAiButtonManager.setFloatingEnabled(context, false)
                                 }
+                            },
+                            showDivider = true
+                        )
+
+                        // Floating AI Appearance & Customization (Colors & Icons)
+                        SettingsValueRow(
+                            icon = currentFloatingGlyph.iconVector,
+                            iconTint = currentFloatingColor.startColor,
+                            title = "Button Appearance",
+                            value = "${currentFloatingColor.displayName.split(" ").firstOrNull() ?: currentFloatingColor.displayName} • ${currentFloatingGlyph.displayName}",
+                            onClick = {
+                                HapticManager.performClick(context)
+                                showFloatingAiCustomizeSheet = true
                             },
                             showDivider = true
                         )
@@ -1464,7 +1493,7 @@ fun SettingsScreen(
             },
             text = {
                 Text(
-                    text = "To keep the purple AI shortcut accessible across your whole phone (such as while using WhatsApp or browsing), TaskFlow requires the 'Display over other apps' system permission.",
+                    text = "To keep the floating AI shortcut accessible across your whole phone (such as while using WhatsApp or browsing), TaskFlow requires the 'Display over other apps' system permission.",
                     fontSize = 14.sp,
                     color = SystemLabelSecondary,
                     lineHeight = 20.sp
@@ -1502,6 +1531,13 @@ fun SettingsScreen(
             },
             containerColor = SystemSurface,
             shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    // Customize Floating AI Assistant Button Sheet (Colors & Icons)
+    if (showFloatingAiCustomizeSheet) {
+        FloatingAiCustomizeSheet(
+            onDismiss = { showFloatingAiCustomizeSheet = false }
         )
     }
 

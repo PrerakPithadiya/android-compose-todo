@@ -120,18 +120,44 @@ TaskFlow is a modern, high-performance task management application for Android, 
 * **Apple (iOS HIG) UI/UX Integration**:
   * Top Navigation Bar glowing sparkle action (`✦`) with Apple Intelligence gradient.
   * Home Screen "TaskFlow Intelligence" insight bento card with real-time pending task counter.
-  * Authentic Apple modal bottom sheet (`28dp` radius) with 3 segmented tabs: *Schedule Plan*, *Priorities*, and *Ask AI*.
+  * Authentic Apple modal bottom sheet (`28dp` radius) with 2 streamlined segmented tabs: **Ask AI** (direct grounded conversational assistant with natural language task creation) and **Priorities** (Eisenhower matrix classification with grounded rationale). Schedule Plan tab removed to maximize sheet responsiveness and direct chatbot access.
   * Modular `CreateTaskBottomSheet` and `EditTaskBottomSheet` components with inline priority chips, time pickers, and category selectors.
-  * Dedicated "Apple Intelligence & LLM" section in Settings with API key management, live connection test diagnostics, and model selection.
+  * Dedicated "Apple Intelligence & LLM" section in Settings with API key management, live connection test diagnostics, model selection, and floating assistant customization.
 
 ### 🔮 12. Floating AI Assistant & Quick-Access Shortcut (Edge-Docked System Overlay)
 * **System-Wide Floating Shortcut Button (`SYSTEM_ALERT_WINDOW`)**:
-  * Persistent background service (`FloatingAiOverlayService`) rendering an Apple HIG purple gradient bubble (`#7C3AED` to `#A855F7`) with a glowing translucent border, elevation drop shadow, and crisp white AI sparkle icon (`ic_floating_ai_sparkle`).
+  * Persistent background service (`FloatingAiOverlayService`) rendering a customizable Apple HIG gradient bubble with a glowing translucent border, elevation drop shadow, and crisp vector icon.
   * Floats seamlessly over any running app (such as WhatsApp, Chrome, YouTube, or Home Screen), allowing users to immediately trigger the TaskFlow AI assistant anytime from anywhere on their phone.
-* **Physical Spring-Back Border Snapping**:
-  * Draggable across 2D touch space with touch slop disambiguation and haptic feedback.
+* **Physical Spring-Back Border Snapping & Zero Center Resting**:
+  * Draggable across 2D touch space with touch slop disambiguation and tactile haptic feedback.
   * Mathematical edge-docking solver (`FloatingAiButtonManager.calculateDockedTargetX`): when released, if the button center is left of the screen midpoint, it animates to the left border (`x = 0`); if right of the midpoint, it animates to the right border (`x = screenWidth - buttonWidth`).
-  * **Zero Center Resting**: The button strictly never remains in the center of the display and always snaps back to the phone's border with Apple-styled spring overshoot physics. Safe vertical margins protect the status bar and gesture navigation bar.
+  * **Zero Center Resting**: The button strictly never remains in the center of the display and always snaps back to the phone's border with Apple-styled spring overshoot physics.
+* **Strict Navigation Bar Clearance (No Visual Overlaps)**:
+  * Strict mathematical boundary clamping (`FloatingAiButtonManager.clampYPosition`) restricts the floating button to move exclusively within the clear space between the top navigation bar and bottom navigation bar.
+  * **Top Navigation Boundary (160dp)**: Keeps the button strictly below the status bar, Large Title navigation bar, and search query field.
+  * **Bottom Navigation Boundary (115dp)**: Keeps the button strictly above the 56dp 5-slot tab bar, the 8dp elevated center-docked Plus button, and gesture navigation insets.
+  * Guaranteed across both system overlay mode (`FloatingAiOverlayService`) and in-app Compose mode (`InAppFloatingAiButton`).
+* **Full Appearance Customization (8 Apple Color Themes & 6 AI Glyphs)**:
+  * **8 Curated Apple (iOS HIG) Color Palettes**:
+    * **Royal Purple** (`#7C3AED` -> `#A855F7`)
+    * **System Blue** (`#007AFF` -> `#0A84FF`)
+    * **Sunset Coral** (`#FF5E3A` -> `#FF9500`)
+    * **Emerald Mint** (`#34C759` -> `#30D158`)
+    * **Neon Cyan** (`#06B6D4` -> `#3B82F6`)
+    * **Dark Minimal / Obsidian** (`#374151` -> `#1F2937`)
+    * **Champagne Gold** (`#F59E0B` -> `#D97706`)
+    * **System Rose** (`#EC4899` -> `#F43F5E`)
+  * **6 Feature-Relevant AI Assistant Glyphs**:
+    * **AI Sparkle** (`AutoAwesome` / `ic_floating_ai_sparkle`): Apple Intelligence / Generative AI stars.
+    * **Assistant Chat** (`Chat` / `ic_floating_ai_chat`): Direct conversational chatbot messaging.
+    * **Smart Agent** (`SmartToy` / `ic_floating_ai_bot`): Dedicated on-device AI bot assistant.
+    * **Quick Capture** (`Bolt` / `ic_floating_ai_bolt`): Instant natural language task logging.
+    * **Smart Tasks** (`CheckCircle` / `ic_floating_ai_check`): TaskFlow schedule manager & checklist.
+    * **Intelligence** (`Psychology` / `ic_floating_ai_brain`): Deep cognitive schedule & priority logic.
+  * **Interactive Customization Sheet (`FloatingAiCustomizeSheet`)**:
+    * Dedicated Apple HIG modal sheet with a live interactive button preview card, 8 gradient swatches with haptic selection rings, and 6 glyph cards with descriptions.
+    * Dual-access points in Settings: under **Appearance & Display** (beside App Icon) and under **TaskFlow Intelligence** (beside the Floating AI toggle).
+    * Dynamic real-time styling broadcast via `ACTION_UPDATE_STYLE` to instantaneously update the active overlay service and in-app Compose button without restarting the app.
 * **Direct Chatbot Shortcut & Intent Routing**:
   * Tapping the floating button immediately brings TaskFlow to the foreground with `EXTRA_OPEN_AI_CHAT`, automatically popping open `TaskFlowIntelligenceSheet` pre-selected to the **Ask AI** chatbot tab.
 * **Conversational Natural Language Task Creation**:

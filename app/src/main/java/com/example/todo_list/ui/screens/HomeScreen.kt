@@ -281,7 +281,7 @@ fun HomeScreen(
                                 pendingTasksCount = remainingTasks,
                                 onOptimizeClick = {
                                     HapticManager.performClick(context)
-                                    intelligenceInitialTab = 0
+                                    intelligenceInitialTab = 1
                                     showIntelligenceSheet = true
                                 }
                             )
@@ -525,7 +525,7 @@ fun HomeScreen(
     }
     if (isFloatingAiActive && !hasSystemOverlay) {
         com.example.todo_list.ui.components.ai.InAppFloatingAiButton {
-            intelligenceInitialTab = 2
+            intelligenceInitialTab = 0
             showIntelligenceSheet = true
         }
     }

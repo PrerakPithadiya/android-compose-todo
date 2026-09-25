@@ -50,10 +50,9 @@ import kotlinx.coroutines.launch
 
 /**
  * Apple iOS HIG TaskFlow Intelligence Modal Bottom Sheet.
- * Features 3 tabs:
- * 1. Schedule Plan (conflict detection, time-blocking, buffer suggestions)
+ * Features 2 tabs:
+ * 1. Ask AI (grounded conversational schedule assistant with natural language task creation)
  * 2. Priorities (Eisenhower classification with grounded rationale)
- * 3. Ask AI (grounded conversational schedule assistant)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,7 +61,7 @@ fun TaskFlowIntelligenceSheet(
     categories: List<TaskListCategory>,
     initialTab: Int = 0,
     onDismiss: () -> Unit,
-    onApplySchedule: (List<ScheduledTaskSlot>) -> Unit,
+    onApplySchedule: (List<ScheduledTaskSlot>) -> Unit = {},
     onApplyPriorities: (Map<String, String>) -> Unit
 ) {
     val context = LocalContext.current
@@ -70,11 +69,9 @@ fun TaskFlowIntelligenceSheet(
     val profile = UserProfileManager.profile
     val taskRepository = remember { com.example.todo_list.data.repository.TaskRepository.getInstance(context) }
 
-    var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab) } // 0: Plan, 1: Priorities, 2: Ask AI
-    var isLoading by remember { mutableStateOf(true) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    var planResult by remember { mutableStateOf<SchedulePlanResult?>(null) }
+    var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab) } // 0: Ask AI, 1: Priorities
+    var isPrioritiesLoading by remember { mutableStateOf(true) }
+    var priorityErrorMessage by remember { mutableStateOf<String?>(null) }
     var priorityResult by remember { mutableStateOf<PrioritySuggestionResult?>(null) }
 
     // Chat state
@@ -91,19 +88,17 @@ fun TaskFlowIntelligenceSheet(
     }
     var isChatThinking by remember { mutableStateOf(false) }
 
-    // Load initial Plan and Priorities concurrently
+    // Load Priorities in background without blocking Ask AI tab
     LaunchedEffect(Unit) {
-        isLoading = true
-        errorMessage = null
+        isPrioritiesLoading = true
+        priorityErrorMessage = null
         try {
-            val plan = TaskFlowIntelligenceService.generateSchedulePlan(tasks, categories, profile)
             val priorities = TaskFlowIntelligenceService.suggestPriorities(tasks, categories, profile)
-            planResult = plan
             priorityResult = priorities
         } catch (e: Exception) {
-            errorMessage = e.localizedMessage ?: "Failed to generate plan"
+            priorityErrorMessage = e.localizedMessage ?: "Failed to generate priorities"
         } finally {
-            isLoading = false
+            isPrioritiesLoading = false
         }
     }
 
@@ -134,7 +129,7 @@ fun TaskFlowIntelligenceSheet(
             // Apple Intelligence Header
             IntelligenceHeader(
                 selectedModel = AiConfigurationManager.selectedModel,
-                isFallback = planResult?.isFallback == true || priorityResult?.isFallback == true,
+                isFallback = priorityResult?.isFallback == true,
                 onClose = onDismiss
             )
 
@@ -151,142 +146,129 @@ fun TaskFlowIntelligenceSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Loading / Error / Content states
-            if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        CircularProgressIndicator(
-                            color = SystemBlue,
-                            strokeWidth = 3.dp,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Text(
-                            text = "Analyzing your schedule & tasks...",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = SystemLabelSecondary
-                        )
-                    }
-                }
-            } else if (errorMessage != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = errorMessage ?: "Unknown error",
-                        color = SystemRed,
-                        fontSize = 15.sp
-                    )
-                }
-            } else {
-                Box(modifier = Modifier.weight(1f)) {
-                    when (selectedTab) {
-                        0 -> PlanTabContent(
-                            plan = planResult,
-                            onApplySchedule = {
-                                planResult?.slots?.let { slots ->
-                                    HapticManager.performSuccess(context)
-                                    onApplySchedule(slots)
-                                    onDismiss()
-                                }
-                            }
-                        )
-                        1 -> PrioritiesTabContent(
-                            result = priorityResult,
-                            onApplyPriorities = {
-                                priorityResult?.suggestions?.let { list ->
-                                    HapticManager.performSuccess(context)
-                                    val map = list.associate { it.taskId to it.suggestedPriority.key }
-                                    onApplyPriorities(map)
-                                    onDismiss()
-                                }
-                            }
-                        )
-                        2 -> {
-                            val handleUserQuery: (String) -> Unit = { queryText ->
-                                if (queryText.isNotBlank()) {
-                                    val q = queryText.trim()
-                                    chatQuery = ""
-                                    chatMessages = chatMessages + ChatMessage(text = q, isUser = true)
-                                    isChatThinking = true
-                                    coroutineScope.launch {
-                                        try {
-                                            if (com.example.todo_list.utils.TaskScheduleParser.isTaskCreationIntent(q)) {
-                                                val cleanPrompt = com.example.todo_list.utils.TaskScheduleParser.stripTaskIntentPrefix(q)
-                                                val parsed = com.example.todo_list.utils.TaskScheduleParser.parse(
-                                                    cleanPrompt,
-                                                    is24Hour = false,
-                                                    knownCategories = categories.map { it.name }
-                                                )
+            Box(modifier = Modifier.weight(1f)) {
+                when (selectedTab) {
+                    0 -> {
+                        val handleUserQuery: (String) -> Unit = { queryText ->
+                            if (queryText.isNotBlank()) {
+                                val q = queryText.trim()
+                                chatQuery = ""
+                                chatMessages = chatMessages + ChatMessage(text = q, isUser = true)
+                                isChatThinking = true
+                                coroutineScope.launch {
+                                    try {
+                                        if (com.example.todo_list.utils.TaskScheduleParser.isTaskCreationIntent(q)) {
+                                            val cleanPrompt = com.example.todo_list.utils.TaskScheduleParser.stripTaskIntentPrefix(q)
+                                            val parsed = com.example.todo_list.utils.TaskScheduleParser.parse(
+                                                cleanPrompt,
+                                                is24Hour = false,
+                                                knownCategories = categories.map { it.name }
+                                            )
 
-                                                val title = parsed.cleanedTitle.replaceFirstChar { it.uppercase() }
-                                                val category = parsed.suggestedCategory ?: categories.firstOrNull()?.name ?: "Personal"
-                                                val date = parsed.suggestedDate ?: "Today"
-                                                val time = parsed.suggestedTime ?: "09:00 AM"
-                                                val priorityStr = when (parsed.suggestedPriority?.uppercase()) {
-                                                    "HIGH" -> "HIGH"
-                                                    "LOW" -> "LOW"
-                                                    else -> "MEDIUM"
-                                                }
-
-                                                val newTask = TaskItem(
-                                                    id = java.util.UUID.randomUUID().toString(),
-                                                    title = title,
-                                                    category = category,
-                                                    date = date,
-                                                    time = time,
-                                                    priority = priorityStr,
-                                                    epochDay = parsed.suggestedEpochDay ?: (System.currentTimeMillis() / (1000 * 60 * 60 * 24)),
-                                                    userId = com.example.todo_list.security.AuthManager.currentUserId ?: ""
-                                                )
-
-                                                taskRepository.insertTask(newTask)
-                                                com.example.todo_list.notification.TaskNotificationScheduler.schedule(context, newTask)
-                                                UserProfileManager.addXp(50)
-                                                HapticManager.performSuccess(context)
-
-                                                val confirmationText = "✨ **Task Created Successfully!**\n\n" +
-                                                        "📌 **$title**\n" +
-                                                        "🗓️ **Date:** $date\n" +
-                                                        "⏰ **Time:** $time\n" +
-                                                        "📂 **Category:** $category\n" +
-                                                        "⚡ **Priority:** $priorityStr\n\n" +
-                                                        "Saved directly to your schedule."
-
-                                                chatMessages = chatMessages + ChatMessage(text = confirmationText, isUser = false)
-                                            } else {
-                                                val res = TaskFlowIntelligenceService.askAssistant(q, tasks, categories, profile)
-                                                chatMessages = chatMessages + ChatMessage(text = res.answer, isUser = false)
+                                            val title = parsed.cleanedTitle.replaceFirstChar { it.uppercase() }
+                                            val category = parsed.suggestedCategory ?: categories.firstOrNull()?.name ?: "Personal"
+                                            val date = parsed.suggestedDate ?: "Today"
+                                            val time = parsed.suggestedTime ?: "09:00 AM"
+                                            val priorityStr = when (parsed.suggestedPriority?.uppercase()) {
+                                                "HIGH" -> "HIGH"
+                                                "LOW" -> "LOW"
+                                                else -> "MEDIUM"
                                             }
-                                        } catch (e: Exception) {
-                                            chatMessages = chatMessages + ChatMessage(text = "Could not process request: ${e.message}", isUser = false)
-                                        } finally {
-                                            isChatThinking = false
+
+                                            val newTask = TaskItem(
+                                                id = java.util.UUID.randomUUID().toString(),
+                                                title = title,
+                                                category = category,
+                                                date = date,
+                                                time = time,
+                                                priority = priorityStr,
+                                                epochDay = parsed.suggestedEpochDay ?: (System.currentTimeMillis() / (1000 * 60 * 60 * 24)),
+                                                userId = com.example.todo_list.security.AuthManager.currentUserId ?: ""
+                                            )
+
+                                            taskRepository.insertTask(newTask)
+                                            com.example.todo_list.notification.TaskNotificationScheduler.schedule(context, newTask)
+                                            UserProfileManager.addXp(50)
+                                            HapticManager.performSuccess(context)
+
+                                            val confirmationText = "✨ **Task Created Successfully!**\n\n" +
+                                                    "📌 **$title**\n" +
+                                                    "🗓️ **Date:** $date\n" +
+                                                    "⏰ **Time:** $time\n" +
+                                                    "📂 **Category:** $category\n" +
+                                                    "⚡ **Priority:** $priorityStr\n\n" +
+                                                    "Saved directly to your schedule."
+
+                                            chatMessages = chatMessages + ChatMessage(text = confirmationText, isUser = false)
+                                        } else {
+                                            val res = TaskFlowIntelligenceService.askAssistant(q, tasks, categories, profile)
+                                            chatMessages = chatMessages + ChatMessage(text = res.answer, isUser = false)
                                         }
+                                    } catch (e: Exception) {
+                                        chatMessages = chatMessages + ChatMessage(text = "Could not process request: ${e.message}", isUser = false)
+                                    } finally {
+                                        isChatThinking = false
                                     }
                                 }
                             }
+                        }
 
-                            AskAiTabContent(
-                                messages = chatMessages,
-                                isThinking = isChatThinking,
-                                query = chatQuery,
-                                onQueryChange = { chatQuery = it },
-                                onSendQuery = { handleUserQuery(it) },
-                                onChipClick = { chipText ->
-                                    HapticManager.performClick(context)
-                                    handleUserQuery(chipText)
+                        AskAiTabContent(
+                            messages = chatMessages,
+                            isThinking = isChatThinking,
+                            query = chatQuery,
+                            onQueryChange = { chatQuery = it },
+                            onSendQuery = { handleUserQuery(it) },
+                            onChipClick = { chipText ->
+                                HapticManager.performClick(context)
+                                handleUserQuery(chipText)
+                            }
+                        )
+                    }
+                    1 -> {
+                        if (isPrioritiesLoading && priorityResult == null) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = SystemBlue,
+                                        strokeWidth = 3.dp,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                    Text(
+                                        text = "Analyzing task priorities...",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = SystemLabelSecondary
+                                    )
+                                }
+                            }
+                        } else if (priorityErrorMessage != null && priorityResult == null) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = priorityErrorMessage ?: "Unknown error",
+                                    color = SystemRed,
+                                    fontSize = 15.sp
+                                )
+                            }
+                        } else {
+                            PrioritiesTabContent(
+                                result = priorityResult,
+                                onApplyPriorities = {
+                                    priorityResult?.suggestions?.let { list ->
+                                        HapticManager.performSuccess(context)
+                                        val map = list.associate { it.taskId to it.suggestedPriority.key }
+                                        onApplyPriorities(map)
+                                        onDismiss()
+                                    }
                                 }
                             )
                         }
@@ -398,9 +380,8 @@ private fun IntelligenceSegmentedTabs(
                 .padding(3.dp)
         ) {
             val tabs = listOf(
-                Pair("Schedule Plan", Icons.Outlined.Schedule),
-                Pair("Priorities", Icons.Outlined.Flag),
-                Pair("Ask AI", Icons.Outlined.ChatBubbleOutline)
+                Pair("Ask AI", Icons.Outlined.ChatBubbleOutline),
+                Pair("Priorities", Icons.Outlined.Flag)
             )
 
             tabs.forEachIndexed { index, (title, icon) ->
@@ -431,301 +412,6 @@ private fun IntelligenceSegmentedTabs(
                             color = if (isSelected) SystemLabelPrimary else SystemLabelSecondary
                         )
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PlanTabContent(
-    plan: SchedulePlanResult?,
-    onApplySchedule: () -> Unit
-) {
-    if (plan == null) return
-
-    val changedCount = plan.slots.count { it.isTimeChanged }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Focus Status & Summary Card
-            item {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SystemSurface,
-                    border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "Today's Execution Strategy",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = SystemLabelPrimary
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0x1A007AFF))
-                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                            ) {
-                                Text(
-                                    text = plan.focusStatusRecommendation,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = SystemBlue
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = plan.summary,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            color = SystemLabelSecondary
-                        )
-                    }
-                }
-            }
-
-            // Conflict Warning Alert (if any)
-            if (plan.conflicts.isNotEmpty()) {
-                item {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0x1AFF9500),
-                        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0x4DFF9500)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.WarningAmber,
-                                    contentDescription = "Conflicts",
-                                    tint = Color(0xFFFF9500),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    text = "${plan.conflicts.size} Schedule Conflict(s) Detected",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFD97706)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            plan.conflicts.forEach { conflict ->
-                                Text(
-                                    text = "• ${conflict.timeSlot}: ${conflict.conflictingTaskTitles.joinToString(" & ")}",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = SystemLabelPrimary
-                                )
-                                Text(
-                                    text = "  ➔ ${conflict.resolutionSuggestion}",
-                                    fontSize = 12.sp,
-                                    color = SystemLabelSecondary
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Timeline Items Card
-            item {
-                Text(
-                    text = "OPTIMIZED TIMELINE",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SystemLabelSecondary,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SystemSurface,
-                    border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        if (plan.slots.isEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(24.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "No pending tasks to schedule.",
-                                    fontSize = 14.sp,
-                                    color = SystemLabelSecondary
-                                )
-                            }
-                        } else {
-                            plan.slots.forEachIndexed { index, slot ->
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            text = slot.taskTitle,
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = SystemLabelPrimary,
-                                            modifier = Modifier.weight(1f)
-                                        )
-
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            if (slot.isTimeChanged) {
-                                                Text(
-                                                    text = slot.originalTime,
-                                                    fontSize = 12.sp,
-                                                    color = SystemLabelTertiary,
-                                                    textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
-                                                )
-                                                Text(
-                                                    text = "➔",
-                                                    fontSize = 11.sp,
-                                                    color = SystemLabelSecondary
-                                                )
-                                            }
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(if (slot.isTimeChanged) Color(0x1AFF9500) else SystemGray6)
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                            ) {
-                                                Text(
-                                                    text = slot.suggestedTime,
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = if (slot.isTimeChanged) Color(0xFFFF9500) else SystemLabelPrimary
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = slot.rationale,
-                                        fontSize = 12.sp,
-                                        color = SystemLabelSecondary,
-                                        lineHeight = 16.sp
-                                    )
-                                }
-
-                                if (index < plan.slots.size - 1) {
-                                    HorizontalDivider(
-                                        color = SystemDivider,
-                                        thickness = 0.5.dp,
-                                        modifier = Modifier.padding(start = 14.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Gaps & Buffers (if any)
-            if (plan.gaps.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "REST & PRODUCTIVITY GAPS",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = SystemLabelSecondary,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-                    )
-
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = SystemSurface,
-                        border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            plan.gaps.forEach { gap ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.AccessTime,
-                                        contentDescription = "Gap",
-                                        tint = SystemBlue,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = "${gap.startTime} - ${gap.endTime} (${gap.durationMinutes}m): ${gap.recommendation}",
-                                        fontSize = 13.sp,
-                                        color = SystemLabelSecondary
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-        }
-
-        // 1-Tap Apply Schedule Action
-        Surface(
-            color = SystemSurface,
-            border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp)
-        ) {
-            Button(
-                onClick = onApplySchedule,
-                enabled = plan.slots.isNotEmpty(),
-                colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-                    .height(48.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(
-                        text = if (changedCount > 0) "Apply Optimized Schedule ($changedCount Adjustments)" else "Confirm Schedule Plan",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
                 }
             }
         }

@@ -116,4 +116,66 @@ class FloatingAiButtonManagerTest {
         )
         assertEquals(1000, clampedMiddle)
     }
+
+    @Test
+    fun testClampYPosition_strictlyExcludesTopAndBottomNavBars() {
+        val screenHeight = 2400
+        val buttonHeight = 150
+        val topNavBarBoundary = 160 // Top nav bar height with large title & search
+        val bottomNavBarBoundary = 115 // Bottom nav bar with center Plus button & insets
+
+        // Attempting to drag into the top navigation bar area
+        val clampedTop = FloatingAiButtonManager.clampYPosition(
+            currentY = 80,
+            buttonHeight = buttonHeight,
+            screenHeight = screenHeight,
+            topMargin = topNavBarBoundary,
+            bottomMargin = bottomNavBarBoundary
+        )
+        assertTrue("Must be at or below top navigation bar boundary", clampedTop >= topNavBarBoundary)
+
+        // Attempting to drag into the bottom navigation bar area
+        val clampedBottom = FloatingAiButtonManager.clampYPosition(
+            currentY = screenHeight - 50,
+            buttonHeight = buttonHeight,
+            screenHeight = screenHeight,
+            topMargin = topNavBarBoundary,
+            bottomMargin = bottomNavBarBoundary
+        )
+        val maxAllowedY = screenHeight - buttonHeight - bottomNavBarBoundary
+        assertTrue("Must be at or above bottom navigation bar boundary", clampedBottom <= maxAllowedY)
+    }
+
+    @Test
+    fun testFloatingAiColor_paletteOptions() {
+        val colors = FloatingAiColor.entries
+        assertEquals(8, colors.size)
+        assertTrue(colors.any { it.id == "purple" })
+        assertTrue(colors.any { it.id == "blue" })
+        assertTrue(colors.any { it.id == "coral" })
+        assertTrue(colors.any { it.id == "emerald" })
+        assertTrue(colors.any { it.id == "cyan" })
+        assertTrue(colors.any { it.id == "obsidian" })
+        assertTrue(colors.any { it.id == "gold" })
+        assertTrue(colors.any { it.id == "rose" })
+
+        assertEquals(FloatingAiColor.PURPLE, FloatingAiColor.fromId("purple"))
+        assertEquals(FloatingAiColor.DEFAULT, FloatingAiColor.fromId("unknown_color"))
+    }
+
+    @Test
+    fun testFloatingAiGlyph_assistantIcons() {
+        val glyphs = FloatingAiGlyph.entries
+        assertEquals(6, glyphs.size)
+        assertTrue(glyphs.any { it.id == "sparkle" })
+        assertTrue(glyphs.any { it.id == "chat" })
+        assertTrue(glyphs.any { it.id == "bot" })
+        assertTrue(glyphs.any { it.id == "bolt" })
+        assertTrue(glyphs.any { it.id == "check" })
+        assertTrue(glyphs.any { it.id == "brain" })
+
+        assertEquals(FloatingAiGlyph.SPARKLE, FloatingAiGlyph.fromId("sparkle"))
+        assertEquals(FloatingAiGlyph.DEFAULT, FloatingAiGlyph.fromId("invalid_glyph"))
+    }
 }
+

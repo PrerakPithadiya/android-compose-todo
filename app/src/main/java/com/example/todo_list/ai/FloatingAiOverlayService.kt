@@ -69,6 +69,8 @@ class FloatingAiOverlayService : Service() {
     private var windowManager: WindowManager? = null
     private var floatingView: View? = null
     private var layoutParams: WindowManager.LayoutParams? = null
+    private var bubbleView: FrameLayout? = null
+    private var iconView: ImageView? = null
 
     private var currentAnimator: AnimatorSet? = null
 
@@ -85,7 +87,29 @@ class FloatingAiOverlayService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == FloatingAiButtonManager.ACTION_UPDATE_STYLE) {
+            updateStyle()
+        }
         return START_STICKY
+    }
+
+    private fun updateStyle() {
+        val color = FloatingAiButtonManager.selectedColor
+        val glyph = FloatingAiButtonManager.selectedGlyph
+        val density = resources.displayMetrics.density
+
+        val gradient = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(
+                color.startColorHex.toInt(),
+                color.endColorHex.toInt()
+            )
+        ).apply {
+            shape = GradientDrawable.OVAL
+            setStroke((1.5f * density).toInt(), color.strokeColorHex.toInt())
+        }
+        bubbleView?.background = gradient
+        iconView?.setImageDrawable(ContextCompat.getDrawable(this, glyph.drawableResId))
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -157,8 +181,8 @@ class FloatingAiOverlayService : Service() {
 
         val (savedIsRight, savedYRatio) = FloatingAiButtonManager.getDockedPosition()
 
-        val topMargin = (60 * density).toInt()
-        val bottomMargin = (80 * density).toInt()
+        val topMargin = (160 * density).toInt()
+        val bottomMargin = (115 * density).toInt()
 
         val initialY = FloatingAiButtonManager.clampYPosition(
             currentY = (screenHeight * savedYRatio).toInt(),
@@ -203,37 +227,26 @@ class FloatingAiOverlayService : Service() {
             clipToPadding = false
         }
 
-        // Floating Purple Gradient Pill / Circle
+        // Floating Gradient Pill / Circle
         val bubble = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(buttonSize, buttonSize).apply {
                 gravity = Gravity.CENTER
             }
-
-            // Apple iOS HIG Purple Gradient
-            val gradient = GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                intArrayOf(
-                    Color.parseColor("#7C3AED"), // Deep vibrant purple
-                    Color.parseColor("#A855F7")  // Electric purple
-                )
-            ).apply {
-                shape = GradientDrawable.OVAL
-                setStroke((1.5f * density).toInt(), Color.parseColor("#55FFFFFF")) // Subtle glowing rim
-            }
-            background = gradient
             elevation = 10f * density
 
-            // Center Sparkle / AI Star Icon
+            // Center Glyph / Icon
             val icon = ImageView(this@FloatingAiOverlayService).apply {
                 val iconSize = (26 * density).toInt()
                 layoutParams = FrameLayout.LayoutParams(iconSize, iconSize).apply {
                     gravity = Gravity.CENTER
                 }
-                setImageDrawable(ContextCompat.getDrawable(this@FloatingAiOverlayService, R.drawable.ic_floating_ai_sparkle))
                 scaleType = ImageView.ScaleType.FIT_CENTER
             }
             addView(icon)
+            iconView = icon
         }
+        bubbleView = bubble
+        updateStyle()
         container.addView(bubble)
 
         // Dragging & Edge Snapping Touch Listener
@@ -312,8 +325,8 @@ class FloatingAiOverlayService : Service() {
         val viewWidth = view.width.takeIf { it > 0 } ?: (60 * density).toInt()
         val viewHeight = view.height.takeIf { it > 0 } ?: (60 * density).toInt()
 
-        val topMargin = (60 * density).toInt()
-        val bottomMargin = (80 * density).toInt()
+        val topMargin = (160 * density).toInt()
+        val bottomMargin = (115 * density).toInt()
 
         val targetX = FloatingAiButtonManager.calculateDockedTargetX(
             currentX = params.x,
@@ -376,8 +389,8 @@ class FloatingAiOverlayService : Service() {
         val viewWidth = container.width.takeIf { it > 0 } ?: (60 * density).toInt()
         val viewHeight = container.height.takeIf { it > 0 } ?: (60 * density).toInt()
 
-        val topMargin = (60 * density).toInt()
-        val bottomMargin = (80 * density).toInt()
+        val topMargin = (160 * density).toInt()
+        val bottomMargin = (115 * density).toInt()
 
         params.x = if (isRight) screenWidth - viewWidth else 0
         params.y = FloatingAiButtonManager.clampYPosition(
@@ -423,6 +436,8 @@ class FloatingAiOverlayService : Service() {
             } catch (_: Exception) {}
         }
         floatingView = null
+        bubbleView = null
+        iconView = null
         super.onDestroy()
     }
 }

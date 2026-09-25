@@ -64,12 +64,15 @@ fun InAppFloatingAiButton(
     val buttonSizeDp = 52.dp
     val buttonSizePx = with(density) { buttonSizeDp.toPx() }
 
+    val selectedColor = FloatingAiButtonManager.selectedColor
+    val selectedGlyph = FloatingAiButtonManager.selectedGlyph
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val screenWidthPx = with(density) { maxWidth.toPx() }
         val screenHeightPx = with(density) { maxHeight.toPx() }
 
-        val topMarginPx = with(density) { 70.dp.toPx() }
-        val bottomMarginPx = with(density) { 90.dp.toPx() }
+        val topMarginPx = with(density) { 160.dp.toPx() }
+        val bottomMarginPx = with(density) { 115.dp.toPx() }
 
         val (savedIsRight, savedYRatio) = remember { FloatingAiButtonManager.getDockedPosition() }
 
@@ -97,12 +100,12 @@ fun InAppFloatingAiButton(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            Color(0xFF7C3AED), // Deep vibrant Apple purple
-                            Color(0xFFA855F7)  // Electric purple
+                            selectedColor.startColor,
+                            selectedColor.endColor
                         )
                     )
                 )
-                .border(1.5.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                .border(1.5.dp, selectedColor.strokeColor, CircleShape)
                 .pointerInput(screenWidthPx, screenHeightPx) {
                     var totalDragDistance = 0f
 
@@ -180,8 +183,8 @@ fun InAppFloatingAiButton(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.AutoAwesome,
-                contentDescription = "AI Assistant Shortcut",
+                imageVector = selectedGlyph.iconVector,
+                contentDescription = selectedGlyph.displayName,
                 tint = Color.White,
                 modifier = Modifier.size(26.dp)
             )
