@@ -156,7 +156,7 @@ TaskFlow is a modern, high-performance task management application for Android, 
     * **Intelligence** (`Psychology` / `ic_floating_ai_brain`): Deep cognitive schedule & priority logic.
   * **Interactive Customization Sheet (`FloatingAiCustomizeSheet`)**:
     * Dedicated Apple HIG modal sheet with a live interactive button preview card, 8 gradient swatches with haptic selection rings, and 6 glyph cards with descriptions.
-    * Dual-access points in Settings: under **Appearance & Display** (beside App Icon) and under **TaskFlow Intelligence** (beside the Floating AI toggle).
+    * Dedicated access point under **TaskFlow Intelligence** (beside the Floating AI toggle) via the "Button Appearance" setting row.
     * Dynamic real-time styling broadcast via `ACTION_UPDATE_STYLE` to instantaneously update the active overlay service and in-app Compose button without restarting the app.
 * **Direct Chatbot Shortcut & Intent Routing**:
   * Tapping the floating button immediately brings TaskFlow to the foreground with `EXTRA_OPEN_AI_CHAT`, automatically popping open `TaskFlowIntelligenceSheet` pre-selected to the **Ask AI** chatbot tab.

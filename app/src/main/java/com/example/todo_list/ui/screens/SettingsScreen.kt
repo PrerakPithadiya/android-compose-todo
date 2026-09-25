@@ -404,18 +404,6 @@ fun SettingsScreen(
                             showDivider = true
                         )
 
-                        SettingsValueRow(
-                            icon = currentFloatingGlyph.iconVector,
-                            iconTint = currentFloatingColor.startColor,
-                            title = "Floating AI Button",
-                            value = "${currentFloatingColor.displayName.split(" ").firstOrNull() ?: currentFloatingColor.displayName} • ${currentFloatingGlyph.displayName}",
-                            onClick = {
-                                HapticManager.performClick(context)
-                                showFloatingAiCustomizeSheet = true
-                            },
-                            showDivider = true
-                        )
-
                         SettingsSwitchRow(
                             icon = Icons.Outlined.DensityMedium,
                             iconTint = AppleStudy,
