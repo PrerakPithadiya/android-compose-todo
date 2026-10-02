@@ -26,6 +26,9 @@ data class TaskEntity(
     val epochDay: Long = 0L,
     val userId: String = "",
     val priority: String = "NONE",
+    val eisenhowerQuadrant: String = "DO_FIRST",
+    val pomodoroSessionsCompleted: Int = 0,
+    val pomodoroEstimatedSessions: Int = 1,
     val createdAt: Long = System.currentTimeMillis()
 ) {
     fun toModel(): TaskItem {
@@ -38,7 +41,10 @@ data class TaskEntity(
             isCompleted = isCompleted,
             epochDay = epochDay,
             userId = userId,
-            priority = priority
+            priority = priority,
+            eisenhowerQuadrant = eisenhowerQuadrant,
+            pomodoroSessionsCompleted = pomodoroSessionsCompleted,
+            pomodoroEstimatedSessions = pomodoroEstimatedSessions
         )
     }
 
@@ -54,6 +60,9 @@ data class TaskEntity(
                 epochDay = model.epochDay,
                 userId = model.userId,
                 priority = model.priority,
+                eisenhowerQuadrant = model.eisenhowerQuadrant,
+                pomodoroSessionsCompleted = model.pomodoroSessionsCompleted,
+                pomodoroEstimatedSessions = model.pomodoroEstimatedSessions,
                 createdAt = createdAt
             )
         }

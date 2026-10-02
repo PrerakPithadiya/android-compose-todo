@@ -22,6 +22,10 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE userId = :userId ORDER BY createdAt ASC")
     fun getTasksForUserFlow(userId: String): Flow<List<TaskEntity>>
 
+    @Query("SELECT * FROM tasks WHERE userId = :userId ORDER BY createdAt ASC")
+    suspend fun getTasksForUserDirect(userId: String): List<TaskEntity>
+
+
     @Query("SELECT * FROM tasks WHERE userId = :userId AND category = :category ORDER BY createdAt ASC")
     fun getTasksForUserByCategoryFlow(userId: String, category: String): Flow<List<TaskEntity>>
 
@@ -69,6 +73,12 @@ interface TaskDao {
 
     @Query("UPDATE tasks SET time = :time, date = :date, epochDay = :epochDay WHERE id = :taskId")
     suspend fun updateTaskSchedule(taskId: String, time: String, date: String, epochDay: Long)
+
+    @Query("UPDATE tasks SET eisenhowerQuadrant = :quadrant WHERE id = :taskId")
+    suspend fun updateTaskQuadrant(taskId: String, quadrant: String)
+
+    @Query("UPDATE tasks SET pomodoroSessionsCompleted = :completed, pomodoroEstimatedSessions = :estimated WHERE id = :taskId")
+    suspend fun updateTaskPomodoroProgress(taskId: String, completed: Int, estimated: Int)
 
     @Query("SELECT COUNT(*) FROM tasks")
     suspend fun getTaskCount(): Int

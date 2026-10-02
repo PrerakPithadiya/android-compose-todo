@@ -52,7 +52,8 @@ import kotlinx.coroutines.launch
 fun ProfileScreen(
     taskList: List<TaskItem> = emptyList(),
     categoriesList: List<TaskListCategory> = TaskListCategory.DEFAULT_CATEGORIES,
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onOpenRetrospective: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -125,7 +126,13 @@ fun ProfileScreen(
                 HeroProfileCard(
                     profile = profile,
                     avatarUrl = avatarUrl,
-                    onViewPhotoClick = { showPhotoViewerDialog = true },
+                    onViewPhotoClick = {
+                        if (!avatarUrl.isNullOrBlank()) {
+                            showPhotoViewerDialog = true
+                        } else {
+                            showEditProfileSheet = true
+                        }
+                    },
                     onEditPhotoClick = { showEditProfileSheet = true },
                     onFocusStatusClick = { showFocusStatusPicker = true },
                     onEditProfileClick = { showEditProfileSheet = true },
@@ -163,7 +170,8 @@ fun ProfileScreen(
                         completionRate = completionRate,
                         currentStreak = currentStreak,
                         bestStreak = bestStreak,
-                        taskList = taskList
+                        taskList = taskList,
+                        onOpenRetrospective = onOpenRetrospective
                     )
                 }
             }
@@ -290,7 +298,7 @@ fun ProfileScreen(
     }
 
     // Full-Screen Profile Photo Viewer Lightbox
-    if (showPhotoViewerDialog) {
+    if (showPhotoViewerDialog && !avatarUrl.isNullOrBlank()) {
         ProfilePhotoViewerDialog(
             avatarUrl = avatarUrl,
             profile = profile,
@@ -581,7 +589,7 @@ fun ProfileHeaderBar(
 @Composable
 fun HeroProfileCard(
     profile: com.example.todo_list.model.UserProfile,
-    avatarUrl: String,
+    avatarUrl: String?,
     onViewPhotoClick: () -> Unit,
     onEditPhotoClick: () -> Unit,
     onFocusStatusClick: () -> Unit,
@@ -614,19 +622,41 @@ fun HeroProfileCard(
                     contentAlignment = Alignment.BottomEnd,
                     modifier = Modifier.size(76.dp)
                 ) {
-                    AsyncImage(
-                        model = avatarUrl,
-                        contentDescription = "Avatar",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(76.dp)
-                            .clip(CircleShape)
-                            .border(2.dp, SystemBlue, CircleShape)
-                            .clickable {
-                                HapticManager.performClick(context)
-                                onViewPhotoClick()
-                            }
-                    )
+                    if (!avatarUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = avatarUrl,
+                            contentDescription = "Avatar",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(76.dp)
+                                .clip(CircleShape)
+                                .border(2.dp, SystemBlue, CircleShape)
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    onViewPhotoClick()
+                                }
+                        )
+                    } else {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(76.dp)
+                                .clip(CircleShape)
+                                .background(SystemGroupedBackground)
+                                .border(1.dp, SystemDivider, CircleShape)
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    onEditPhotoClick()
+                                }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = "No Profile Photo",
+                                tint = SystemGray,
+                                modifier = Modifier.size(44.dp)
+                            )
+                        }
+                    }
 
                     Surface(
                         shape = CircleShape,
@@ -1201,7 +1231,8 @@ fun ProductivityAnalyticsBento(
     completionRate: Int,
     currentStreak: Int,
     bestStreak: Int,
-    taskList: List<TaskItem>
+    taskList: List<TaskItem>,
+    onOpenRetrospective: () -> Unit = {}
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // Row 1: Tasks Completed & Active Streak
@@ -1215,7 +1246,8 @@ fun ProductivityAnalyticsBento(
                 iconTint = SystemGreen,
                 title = "COMPLETED",
                 value = "$totalCompleted Tasks",
-                subtitle = "$completionRate% completion rate"
+                subtitle = "$completionRate% completion rate",
+                onClick = onOpenRetrospective
             )
 
             BentoCell(
@@ -1224,11 +1256,12 @@ fun ProductivityAnalyticsBento(
                 iconTint = AppleStudy,
                 title = "ACTIVE STREAK",
                 value = "$currentStreak Days 🔥",
-                subtitle = "Best record: $bestStreak days"
+                subtitle = "Best record: $bestStreak days",
+                onClick = onOpenRetrospective
             )
         }
 
-        // Row 2: Focus Time Saved & On-Time Index
+        // Row 2: Focus Time Saved & Retrospectives Deep Dive
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1239,16 +1272,18 @@ fun ProductivityAnalyticsBento(
                 iconTint = SystemBlue,
                 title = "FOCUS TIME",
                 value = "${(totalCompleted * 0.45).toInt()} Hours",
-                subtitle = "Productive flow saved"
+                subtitle = "Productive flow saved",
+                onClick = onOpenRetrospective
             )
 
             BentoCell(
                 modifier = Modifier.weight(1f),
                 icon = Icons.AutoMirrored.Outlined.TrendingUp,
                 iconTint = Color(0xFFAF52DE),
-                title = "EFFICIENCY",
-                value = "96.4%",
-                subtitle = "+4.2% this month"
+                title = "RETROSPECTIVES",
+                value = "Reviews 📊",
+                subtitle = "Tap for MoM report",
+                onClick = onOpenRetrospective
             )
         }
     }
@@ -1261,13 +1296,22 @@ fun BentoCell(
     iconTint: Color,
     title: String,
     value: String,
-    subtitle: String
+    subtitle: String,
+    onClick: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = SystemSurface,
         border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
-        modifier = modifier
+        modifier = if (onClick != null) {
+            modifier.clickable {
+                HapticManager.performClick(context)
+                onClick()
+            }
+        } else {
+            modifier
+        }
     ) {
         Column(
             modifier = Modifier.padding(14.dp),

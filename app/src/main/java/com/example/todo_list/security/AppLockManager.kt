@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.todo_list.data.local.AppDatabase
 import com.example.todo_list.data.local.entity.UserEntity
+import com.example.todo_list.data.remote.SupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -131,6 +132,15 @@ object AppLockManager {
                     isFingerprintAuthEnabled = isFingerprintAuthEnabled,
                     lockTimeoutMs = lockTimeoutMs
                 )
+                SupabaseClient.updateUserLock(
+                    userId = userId,
+                    lockType = type.id,
+                    lockHash = hash,
+                    lockSalt = salt,
+                    isLockEnabled = true,
+                    isBiometricEnabled = isBiometricEnabled,
+                    lockTimeoutMs = lockTimeoutMs
+                )
             }
         }
     }
@@ -247,6 +257,15 @@ object AppLockManager {
                     isBiometricEnabled = false,
                     isFaceAuthEnabled = false,
                     isFingerprintAuthEnabled = false,
+                    lockTimeoutMs = lockTimeoutMs
+                )
+                SupabaseClient.updateUserLock(
+                    userId = user.id,
+                    lockType = currentLockType.id,
+                    lockHash = null,
+                    lockSalt = null,
+                    isLockEnabled = false,
+                    isBiometricEnabled = false,
                     lockTimeoutMs = lockTimeoutMs
                 )
             }

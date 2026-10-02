@@ -159,14 +159,14 @@ fun LoginScreen(
         }
     }
 
-    // Manual login (username/phone + password)
-    val triggerManualLogin = {
-        if (isFormValid && !isLoggingIn) {
+    // Perform login with given credentials (manual or demo accounts)
+    val performLoginWithCredentials: (String, String) -> Unit = { id, pw ->
+        if (!isLoggingIn) {
             isLoggingIn = true
             focusManager.clearFocus()
 
             coroutineScope.launch {
-                val success = AuthManager.login(identifier, password)
+                val success = AuthManager.login(id, pw)
                 if (success) {
                     HapticManager.performSuccess(context)
                     isError = false
@@ -176,15 +176,22 @@ fun LoginScreen(
                 } else {
                     HapticManager.performError(context)
                     isError = true
-                    val exists = AuthManager.userExists(identifier)
+                    val exists = AuthManager.userExists(id)
                     errorMessage = if (!exists) {
-                        "No registered account found with \"${identifier.trim()}\". Please create an account first."
+                        "No registered account found with \"${id.trim()}\". Please check or create an account."
                     } else {
                         "Incorrect password. Please verify your credentials and try again."
                     }
                     isLoggingIn = false
                 }
             }
+        }
+    }
+
+    // Manual login (username/phone + password)
+    val triggerManualLogin = {
+        if (isFormValid && !isLoggingIn) {
+            performLoginWithCredentials(identifier, password)
         }
     }
 
@@ -692,6 +699,59 @@ fun LoginScreen(
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
+                }
+
+                // Cloud Demo Quick Login
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "CLOUD DEMO ACCOUNTS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SystemLabelSecondary,
+                        letterSpacing = 0.8.sp
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            Triple("Alex", "@alexcarter", "password123"),
+                            Triple("Sarah", "@sarahc", "password123"),
+                            Triple("David", "@davidm", "password123")
+                        ).forEach { (name, user, pw) ->
+                            OutlinedButton(
+                                onClick = {
+                                    identifier = user
+                                    password = pw
+                                    performLoginWithCredentials(user, pw)
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, SystemBlue.copy(alpha = 0.35f)),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = SystemSurface,
+                                    contentColor = SystemBlue
+                                ),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp)
+                            ) {
+                                Text(
+                                    text = "👤 $name",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
                 }
             }
 

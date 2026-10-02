@@ -66,6 +66,9 @@ class MainActivity : FragmentActivity() {
         // Initialize persistent Floating AI Shortcut Button state & service
         com.example.todo_list.ai.FloatingAiButtonManager.initialize(this)
 
+        // Initialize persistent Pomodoro Focus Timer state
+        com.example.todo_list.manager.PomodoroTimerManager.initialize(this)
+
         // Handle direct AI shortcut intent from floating assistant
         handleAiChatIntent(intent)
 

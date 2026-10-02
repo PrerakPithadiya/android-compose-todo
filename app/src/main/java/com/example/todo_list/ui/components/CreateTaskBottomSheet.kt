@@ -37,6 +37,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.todo_list.manager.TimePreferencesManager
+import com.example.todo_list.model.EisenhowerQuadrant
 import com.example.todo_list.model.TaskItem
 import com.example.todo_list.model.TaskListCategory
 import com.example.todo_list.model.TaskPriority
@@ -109,6 +110,8 @@ fun CreateTaskBottomSheet(
         mutableStateOf(if (is24Hour) "17:00" else "05:00 PM")
     }
     var selectedPriority by remember { mutableStateOf("NONE") }
+    var selectedQuadrant by remember { mutableStateOf(EisenhowerQuadrant.DO_FIRST.key) }
+    var estimatedPomodoroSessions by remember { mutableIntStateOf(1) }
     var titleError by remember { mutableStateOf(false) }
 
     // Inline Pickers Visibility in Stage 2 Details
@@ -214,7 +217,10 @@ fun CreateTaskBottomSheet(
                     time = selectedTime.ifBlank { "12:00 PM" },
                     isCompleted = false,
                     epochDay = selectedEpochDay,
-                    priority = selectedPriority
+                    priority = selectedPriority,
+                    eisenhowerQuadrant = selectedQuadrant,
+                    pomodoroSessionsCompleted = 0,
+                    pomodoroEstimatedSessions = estimatedPomodoroSessions
                 )
             )
         }
@@ -1032,7 +1038,11 @@ fun CreateTaskBottomSheet(
                                     .fillMaxWidth()
                                     .clickable {
                                         HapticManager.perform(context, HapticType.CLICK)
-                                        showInlineDatePicker = !showInlineDatePicker
+                                        val willOpen = !showInlineDatePicker
+                                        showInlineDatePicker = willOpen
+                                        if (willOpen) {
+                                            showInlineTimePicker = false
+                                        }
                                     }
                                     .padding(horizontal = TFSpace.lg, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1147,7 +1157,11 @@ fun CreateTaskBottomSheet(
                                     .fillMaxWidth()
                                     .clickable {
                                         HapticManager.perform(context, HapticType.CLICK)
-                                        showInlineTimePicker = !showInlineTimePicker
+                                        val willOpen = !showInlineTimePicker
+                                        showInlineTimePicker = willOpen
+                                        if (willOpen) {
+                                            showInlineDatePicker = false
+                                        }
                                     }
                                     .padding(horizontal = TFSpace.lg, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1451,6 +1465,181 @@ fun CreateTaskBottomSheet(
                                                 color = accentRoles.accentText
                                             )
                                         }
+                                    }
+                                }
+                            }
+
+                            TFGroupDivider(startIndent = TFSpace.lg)
+
+                            // Eisenhower Matrix Quadrant
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = TFSpace.lg, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(accentRoles.accent.copy(alpha = 0.15f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.GridView,
+                                                contentDescription = "Eisenhower Quadrant",
+                                                tint = accentRoles.accent,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                text = "Eisenhower Matrix",
+                                                style = typography.body,
+                                                color = colors.labelPrimary
+                                            )
+                                            Text(
+                                                text = EisenhowerQuadrant.fromString(selectedQuadrant).subtitle,
+                                                style = typography.caption,
+                                                color = colors.labelSecondary
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = TFShape.pill,
+                                        color = Color(EisenhowerQuadrant.fromString(selectedQuadrant).badgeBgHex)
+                                    ) {
+                                        Text(
+                                            text = EisenhowerQuadrant.fromString(selectedQuadrant).title,
+                                            style = typography.caption,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(EisenhowerQuadrant.fromString(selectedQuadrant).colorHex),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .clip(TFShape.segmentedTrack)
+                                        .background(colors.fillControl)
+                                        .padding(2.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    EisenhowerQuadrant.entries.forEach { quad ->
+                                        val isSelected = selectedQuadrant == quad.key
+                                        val quadColor = Color(quad.colorHex)
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(TFShape.segmentedThumb)
+                                                .background(if (isSelected) colors.card else Color.Transparent)
+                                                .clickable {
+                                                    HapticManager.perform(context, HapticType.CLICK)
+                                                    selectedQuadrant = quad.key
+                                                }
+                                                .padding(vertical = 6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = quad.actionLabel,
+                                                style = typography.caption,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) quadColor else colors.labelSecondary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            TFGroupDivider(startIndent = TFSpace.lg)
+
+                            // Pomodoro Estimate Stepper
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = TFSpace.lg, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(colors.red.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Timer,
+                                            contentDescription = "Pomodoro",
+                                            tint = colors.red,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Pomodoro Focus",
+                                            style = typography.body,
+                                            color = colors.labelPrimary
+                                        )
+                                        Text(
+                                            text = "Estimated 25m intervals",
+                                            style = typography.caption,
+                                            color = colors.labelSecondary
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(colors.fillControl),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(
+                                        onClick = {
+                                            if (estimatedPomodoroSessions > 1) {
+                                                HapticManager.perform(context, HapticType.CLICK)
+                                                estimatedPomodoroSessions--
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Text("-", style = typography.headline, color = colors.labelPrimary)
+                                    }
+
+                                    Text(
+                                        text = "$estimatedPomodoroSessions 🍅",
+                                        style = typography.subheadline,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.labelPrimary,
+                                        modifier = Modifier.padding(horizontal = 6.dp)
+                                    )
+
+                                    IconButton(
+                                        onClick = {
+                                            if (estimatedPomodoroSessions < 12) {
+                                                HapticManager.perform(context, HapticType.CLICK)
+                                                estimatedPomodoroSessions++
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Text("+", style = typography.headline, color = colors.labelPrimary)
                                     }
                                 }
                             }

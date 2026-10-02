@@ -59,6 +59,9 @@ fun ListsScreen(
     onCreateCategory: (TaskListCategory) -> Unit,
     onDeleteCategory: (TaskListCategory) -> Unit = {},
     onDeleteCategoryWithMigration: (TaskListCategory, String) -> Unit = { cat, _ -> onDeleteCategory(cat) },
+    onOpenEisenhowerMatrix: () -> Unit = {},
+    onOpenPomodoro: () -> Unit = {},
+    onOpenRetrospective: () -> Unit = {},
     onOpenAddTaskSheet: (prefilledCategory: String) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -144,6 +147,152 @@ fun ListsScreen(
                         selectedSmartFilter = filter
                     }
                 )
+            }
+
+            // Apple Bento Power Tools: Eisenhower Matrix & Pomodoro Timer
+            item(key = "productivity_power_tools") {
+                Text(
+                    text = "PRODUCTIVITY TOOLS",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SystemLabelSecondary,
+                    letterSpacing = 0.5.sp,
+                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Eisenhower Matrix Card
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(TFTheme.colors.card)
+                            .border(hairline(), TFTheme.colors.cardStroke, RoundedCornerShape(16.dp))
+                            .clickable {
+                                HapticManager.performClick(context)
+                                onOpenEisenhowerMatrix()
+                            }
+                            .padding(14.dp)
+                    ) {
+                        Column {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(SystemBlue.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.GridView,
+                                    contentDescription = "Eisenhower Matrix",
+                                    tint = SystemBlue,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Eisenhower Matrix",
+                                style = TFTheme.typography.subheadline,
+                                fontWeight = FontWeight.Bold,
+                                color = TFTheme.colors.labelPrimary
+                            )
+                            Text(
+                                text = "4 Quadrants Priority",
+                                style = TFTheme.typography.caption,
+                                color = TFTheme.colors.labelSecondary
+                            )
+                        }
+                    }
+
+                    // Pomodoro Focus Timer Card
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(TFTheme.colors.card)
+                            .border(hairline(), TFTheme.colors.cardStroke, RoundedCornerShape(16.dp))
+                            .clickable {
+                                HapticManager.performClick(context)
+                                onOpenPomodoro()
+                            }
+                            .padding(14.dp)
+                    ) {
+                        Column {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFF3B30).copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Timer,
+                                    contentDescription = "Pomodoro Timer",
+                                    tint = Color(0xFFFF3B30),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Pomodoro Focus",
+                                style = TFTheme.typography.subheadline,
+                                fontWeight = FontWeight.Bold,
+                                color = TFTheme.colors.labelPrimary
+                            )
+                            Text(
+                                text = "Work & Breaks",
+                                style = TFTheme.typography.caption,
+                                color = TFTheme.colors.labelSecondary
+                            )
+                        }
+                    }
+
+                    // Analytics & Retrospectives Card
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(TFTheme.colors.card)
+                            .border(hairline(), TFTheme.colors.cardStroke, RoundedCornerShape(16.dp))
+                            .clickable {
+                                HapticManager.performClick(context)
+                                onOpenRetrospective()
+                            }
+                            .padding(14.dp)
+                    ) {
+                        Column {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(AppleHealth.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Insights,
+                                    contentDescription = "Analytics & Retrospectives",
+                                    tint = AppleHealth,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Retrospectives",
+                                style = TFTheme.typography.subheadline,
+                                fontWeight = FontWeight.Bold,
+                                color = TFTheme.colors.labelPrimary
+                            )
+                            Text(
+                                text = "Weekly & MoM",
+                                style = TFTheme.typography.caption,
+                                color = TFTheme.colors.labelSecondary
+                            )
+                        }
+                    }
+                }
             }
 
             // My Lists Inset Grouped Section

@@ -4,6 +4,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
@@ -26,15 +29,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.todo_list.manager.UserProfileManager
 import com.example.todo_list.model.AvatarPreset
 import com.example.todo_list.model.UserProfile
+import com.example.todo_list.ui.components.primitives.TFButton
+import com.example.todo_list.ui.components.primitives.TFButtonType
+import com.example.todo_list.ui.components.primitives.TFCardGroup
+import com.example.todo_list.ui.components.primitives.TFGroupDivider
 import com.example.todo_list.ui.theme.*
 import com.example.todo_list.utils.HapticManager
 
@@ -46,6 +58,9 @@ fun EditProfileBottomSheet(
     onProfileSaved: () -> Unit
 ) {
     val context = LocalContext.current
+    val colors = TFTheme.colors
+    val accentRoles = TFTheme.accentRoles
+    val typography = TFTheme.typography
 
     var name by remember { mutableStateOf(profile.name) }
     var username by remember { mutableStateOf(profile.username) }
@@ -68,14 +83,41 @@ fun EditProfileBottomSheet(
         }
     }
 
-    val activeAvatarUrl = customUri ?: AvatarPreset.getById(selectedPresetId).avatarUrl
+    // Dynamic avatar url: shows custom image if present, or the selected avatar preset
+    val currentDisplayAvatarUrl = if (!customUri.isNullOrBlank()) {
+        customUri
+    } else {
+        val preset = AvatarPreset.PRESETS.find { it.id == selectedPresetId } ?: AvatarPreset.PRESETS[0]
+        preset.avatarUrl
+    }
+
+    // Single source of truth for saving profile changes atomically
+    val onSaveProfile: () -> Unit = {
+        if (name.isBlank()) {
+            Toast.makeText(context, "Display name cannot be empty", Toast.LENGTH_SHORT).show()
+        } else {
+            UserProfileManager.saveProfile(
+                name = name.trim(),
+                username = username.trim(),
+                email = email.trim(),
+                phone = phone.trim(),
+                bio = bio.trim(),
+                avatarPresetId = selectedPresetId,
+                customAvatarUri = customUri
+            )
+            HapticManager.performSuccess(context)
+            Toast.makeText(context, "Profile updated successfully", Toast.LENGTH_SHORT).show()
+            onProfileSaved()
+            onDismiss()
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = SystemSurface,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle(color = SystemDivider) }
+        containerColor = colors.cardRaised,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = colors.separator) }
     ) {
         Column(
             modifier = Modifier
@@ -83,81 +125,90 @@ fun EditProfileBottomSheet(
                 .navigationBarsPadding()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Header
+            // Apple HIG Navigation Bar
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Edit Profile",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SystemLabelPrimary
-                )
-
                 TextButton(
                     onClick = {
-                        if (name.isBlank()) {
-                            Toast.makeText(context, "Display name cannot be empty", Toast.LENGTH_SHORT).show()
-                            return@TextButton
-                        }
-                        UserProfileManager.updateProfile(
-                            name = name,
-                            username = username,
-                            email = email,
-                            phone = phone,
-                            bio = bio
-                        )
-                        if (customUri != null) {
-                            UserProfileManager.setCustomAvatarUri(customUri)
-                        } else {
-                            UserProfileManager.setAvatarPreset(selectedPresetId)
-                        }
-                        HapticManager.performSuccess(context)
-                        Toast.makeText(context, "Profile updated successfully", Toast.LENGTH_SHORT).show()
-                        onProfileSaved()
+                        HapticManager.performClick(context)
                         onDismiss()
                     }
                 ) {
                     Text(
+                        text = "Cancel",
+                        style = typography.body,
+                        color = colors.labelSecondary
+                    )
+                }
+
+                Text(
+                    text = "Edit Profile",
+                    style = typography.headline,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.labelPrimary
+                )
+
+                TextButton(
+                    onClick = {
+                        HapticManager.performClick(context)
+                        onSaveProfile()
+                    }
+                ) {
+                    Text(
                         text = "Done",
-                        fontSize = 17.sp,
+                        style = typography.body,
                         fontWeight = FontWeight.Bold,
-                        color = SystemBlue
+                        color = accentRoles.accentText
                     )
                 }
             }
 
-            // Avatar Preview & Gallery Upload Trigger
+            // Avatar Preview & Capsule Action Controls
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                // Interactive 96dp Avatar with Accent Border & Docked Camera Badge
                 Box(
                     contentAlignment = Alignment.BottomEnd,
-                    modifier = Modifier.size(90.dp)
+                    modifier = Modifier.size(96.dp)
                 ) {
                     AsyncImage(
-                        model = activeAvatarUrl,
+                        model = currentDisplayAvatarUrl,
                         contentDescription = "Active Avatar",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(90.dp)
+                            .size(96.dp)
                             .clip(CircleShape)
-                            .border(2.dp, SystemBlue, CircleShape)
+                            .background(colors.cardSecondary)
+                            .border(
+                                width = 2.dp,
+                                color = if (customUri != null) accentRoles.accent else colors.cardStroke,
+                                shape = CircleShape
+                            )
+                            .clickable {
+                                HapticManager.performClick(context)
+                                photoPickerLauncher.launch("image/*")
+                            }
                     )
 
                     Surface(
                         shape = CircleShape,
-                        color = SystemBlue,
-                        shadowElevation = 4.dp,
+                        color = accentRoles.accentFill,
+                        shadowElevation = 3.dp,
                         modifier = Modifier
-                            .size(28.dp)
+                            .size(30.dp)
                             .clickable {
                                 HapticManager.performClick(context)
                                 photoPickerLauncher.launch("image/*")
@@ -167,44 +218,147 @@ fun EditProfileBottomSheet(
                             Icon(
                                 imageVector = Icons.Filled.AddAPhoto,
                                 contentDescription = "Change Photo",
-                                tint = Color.White,
+                                tint = accentRoles.onAccent,
                                 modifier = Modifier.size(15.dp)
                             )
                         }
                     }
                 }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(
-                        onClick = {
-                            HapticManager.performClick(context)
-                            photoPickerLauncher.launch("image/*")
-                        }
+                // Apple HIG Capsule Action Controls
+                if (customUri != null) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (customUri != null) "Choose Another Photo" else "Choose from Gallery",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = SystemBlue
-                        )
-                    }
-
-                    if (customUri != null) {
-                        TextButton(
-                            onClick = {
-                                HapticManager.performClick(context)
-                                pendingRawUri = customUri
-                                showImageCropDialog = true
-                            }
+                        // Change Photo Pill
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = colors.fillControl,
+                            border = if (colors.isDark) BorderStroke(hairline(), colors.cardStroke) else null,
+                            modifier = Modifier
+                                .height(36.dp)
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    photoPickerLauncher.launch("image/*")
+                                }
                         ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.PhotoCamera,
+                                    contentDescription = null,
+                                    tint = accentRoles.accentText,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = "Change",
+                                    style = typography.caption,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = accentRoles.accentText
+                                )
+                            }
+                        }
+
+                        // Edit Crop & Filters Pill
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = colors.fillControl,
+                            border = if (colors.isDark) BorderStroke(hairline(), colors.cardStroke) else null,
+                            modifier = Modifier
+                                .height(36.dp)
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    pendingRawUri = customUri
+                                    showImageCropDialog = true
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Crop,
+                                    contentDescription = null,
+                                    tint = accentRoles.accentText,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = "Crop & Filter",
+                                    style = typography.caption,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = accentRoles.accentText
+                                )
+                            }
+                        }
+
+                        // Remove Photo Pill (Destructive)
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = colors.red.copy(alpha = 0.12f),
+                            border = if (colors.isDark) BorderStroke(hairline(), colors.red.copy(alpha = 0.3f)) else null,
+                            modifier = Modifier
+                                .height(36.dp)
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    customUri = null
+                                    if (selectedPresetId < 0) {
+                                        selectedPresetId = 0
+                                    }
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Delete,
+                                    contentDescription = null,
+                                    tint = colors.red,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = "Remove",
+                                    style = typography.caption,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = colors.red
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = colors.fillControl,
+                        border = if (colors.isDark) BorderStroke(hairline(), colors.cardStroke) else null,
+                        modifier = Modifier
+                            .height(36.dp)
+                            .clickable {
+                                HapticManager.performClick(context)
+                                photoPickerLauncher.launch("image/*")
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.AddPhotoAlternate,
+                                contentDescription = null,
+                                tint = accentRoles.accentText,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Text(
-                                text = "Edit Crop & Filters",
-                                fontSize = 14.sp,
+                                text = "Choose from Gallery",
+                                style = typography.subheadline,
                                 fontWeight = FontWeight.SemiBold,
-                                color = SystemBlue
+                                color = accentRoles.accentText
                             )
                         }
                     }
@@ -212,40 +366,59 @@ fun EditProfileBottomSheet(
             }
 
             // Preset Avatars Section
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "CHOOSE AVATAR PRESET",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SystemLabelSecondary,
-                    letterSpacing = 0.5.sp
-                )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "CHOOSE AVATAR PRESET",
+                        style = typography.footnote,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.labelSecondary,
+                        letterSpacing = 0.5.sp
+                    )
+
+                    if (customUri == null) {
+                        Text(
+                            text = AvatarPreset.getById(selectedPresetId).name,
+                            style = typography.caption,
+                            fontWeight = FontWeight.Medium,
+                            color = accentRoles.accentText
+                        )
+                    }
+                }
 
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(horizontal = 2.dp)
+                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
                 ) {
                     items(AvatarPreset.PRESETS, key = { it.id }) { preset ->
                         val isSelected = (customUri == null && selectedPresetId == preset.id)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.clickable {
                                 HapticManager.performClick(context)
                                 customUri = null
                                 selectedPresetId = preset.id
-                                UserProfileManager.setCustomAvatarUri(null)
-                                UserProfileManager.setAvatarPreset(preset.id)
                             }
                         ) {
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
-                                    .size(54.dp)
+                                    .size(56.dp)
                                     .clip(CircleShape)
+                                    .background(colors.cardSecondary)
                                     .border(
-                                        width = if (isSelected) 2.5.dp else 1.dp,
-                                        color = if (isSelected) SystemBlue else SystemDivider,
+                                        width = if (isSelected) 2.5.dp else hairline(),
+                                        color = if (isSelected) accentRoles.accent else colors.cardStroke,
                                         shape = CircleShape
                                     )
                             ) {
@@ -263,7 +436,7 @@ fun EditProfileBottomSheet(
                                         contentAlignment = Alignment.Center,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .background(SystemBlue.copy(alpha = 0.35f))
+                                            .background(accentRoles.accent.copy(alpha = 0.35f))
                                     ) {
                                         Icon(
                                             imageVector = Icons.Filled.Check,
@@ -275,186 +448,144 @@ fun EditProfileBottomSheet(
                                 }
                             }
 
-                            Text(
-                                text = preset.emoji,
-                                fontSize = 12.sp
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) accentRoles.accentContainer else colors.fillControl.copy(alpha = 0.6f)
+                            ) {
+                                Text(
+                                    text = preset.emoji,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            HorizontalDivider(color = SystemDivider, thickness = 0.5.dp)
-
-            // Text Inputs
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                OutlinedTextField(
+            // Inset Grouped Form: Profile Information
+            TFCardGroup(headerTitle = "PROFILE INFORMATION") {
+                ProfileInputField(
+                    label = "Display Name",
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Display Name") },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Outlined.Person, contentDescription = "Name", tint = SystemBlue)
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SystemBlue,
-                        unfocusedBorderColor = SystemDivider
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    icon = Icons.Outlined.Person,
+                    placeholder = "Your full name",
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
                 )
 
-                OutlinedTextField(
+                TFGroupDivider(startIndent = 56.dp)
+
+                ProfileInputField(
+                    label = "Username Handle",
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("Username Handle") },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Outlined.AlternateEmail, contentDescription = "Username", tint = SystemBlue)
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SystemBlue,
-                        unfocusedBorderColor = SystemDivider
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    icon = Icons.Outlined.AlternateEmail,
+                    placeholder = "@username"
                 )
 
-                OutlinedTextField(
+                TFGroupDivider(startIndent = 56.dp)
+
+                ProfileInputField(
+                    label = "Email Address",
                     value = email,
                     onValueChange = { email = it },
-                    label = { Text("Email Address") },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Outlined.MailOutline, contentDescription = "Email", tint = SystemBlue)
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SystemBlue,
-                        unfocusedBorderColor = SystemDivider
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    icon = Icons.Outlined.MailOutline,
+                    placeholder = "name@example.com",
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
                 )
 
-                OutlinedTextField(
+                TFGroupDivider(startIndent = 56.dp)
+
+                ProfileInputField(
+                    label = "Phone Number",
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("Phone Number") },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Outlined.Phone, contentDescription = "Phone", tint = SystemBlue)
-                    },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SystemBlue,
-                        unfocusedBorderColor = SystemDivider
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    icon = Icons.Outlined.Phone,
+                    placeholder = "+1 (555) 000-0000",
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
                 )
 
-                OutlinedTextField(
+                TFGroupDivider(startIndent = 56.dp)
+
+                ProfileInputField(
+                    label = "Bio & Status Note",
                     value = bio,
                     onValueChange = { bio = it },
-                    label = { Text("Bio & Status Note") },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Outlined.EditNote, contentDescription = "Bio", tint = SystemBlue)
-                    },
+                    icon = Icons.Outlined.EditNote,
+                    placeholder = "Add a bio...",
+                    singleLine = false,
                     minLines = 2,
-                    maxLines = 3,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SystemBlue,
-                        unfocusedBorderColor = SystemDivider
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
                 )
+            }
 
-                // Security & Password Change Action Row
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SystemGray6,
-                    border = androidx.compose.foundation.BorderStroke(0.5.dp, SystemDivider),
+            // Inset Grouped Card: Account Security
+            TFCardGroup(headerTitle = "ACCOUNT SECURITY") {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
                             HapticManager.performClick(context)
                             showChangePasswordSheet = true
                         }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        Box(
+                            modifier = Modifier.size(28.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.LockReset,
                                 contentDescription = "Password",
-                                tint = SystemBlue,
+                                tint = accentRoles.accent,
                                 modifier = Modifier.size(22.dp)
                             )
-                            Column {
-                                Text(
-                                    text = "Change Account Password",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = SystemLabelPrimary
-                                )
-                                Text(
-                                    text = "Protected with Multi-Factor Security Gate",
-                                    fontSize = 12.sp,
-                                    color = SystemLabelSecondary
-                                )
-                            }
                         }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = null,
-                            tint = SystemLabelSecondary.copy(alpha = 0.6f),
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Column {
+                            Text(
+                                text = "Change Account Password",
+                                style = typography.subheadline,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.labelPrimary
+                            )
+                            Text(
+                                text = "Protected with Multi-Factor Security Gate",
+                                style = typography.caption,
+                                color = colors.labelSecondary
+                            )
+                        }
                     }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        contentDescription = null,
+                        tint = colors.labelSecondary.copy(alpha = 0.5f),
+                        modifier = Modifier.size(14.dp)
+                    )
                 }
             }
 
-            // Save Changes Button
-            Button(
-                onClick = {
-                    if (name.isBlank()) {
-                        Toast.makeText(context, "Display name cannot be empty", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    UserProfileManager.updateProfile(
-                        name = name,
-                        username = username,
-                        email = email,
-                        phone = phone,
-                        bio = bio
-                    )
-                    if (customUri != null) {
-                        UserProfileManager.setCustomAvatarUri(customUri)
-                    } else {
-                        UserProfileManager.setAvatarPreset(selectedPresetId)
-                    }
-                    HapticManager.performSuccess(context)
-                    Toast.makeText(context, "Profile updated successfully", Toast.LENGTH_SHORT).show()
-                    onProfileSaved()
-                    onDismiss()
-                },
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SystemBlue),
+            // Save Profile Primary Button
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .padding(horizontal = 16.dp)
             ) {
-                Text(
+                TFButton(
                     text = "Save Profile",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    onClick = {
+                        HapticManager.performClick(context)
+                        onSaveProfile()
+                    },
+                    type = TFButtonType.FILLED,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
@@ -482,11 +613,90 @@ fun EditProfileBottomSheet(
             },
             onPhotoFinalized = { croppedUri ->
                 customUri = croppedUri
-                selectedPresetId = -1
                 showImageCropDialog = false
                 HapticManager.performSuccess(context)
                 Toast.makeText(context, "Photo crop and adjustments applied", Toast.LENGTH_SHORT).show()
             }
         )
+    }
+}
+
+/**
+ * Apple iOS Inset Grouped Profile Input Field Row.
+ */
+@Composable
+private fun ProfileInputField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    icon: ImageVector,
+    placeholder: String = "",
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    maxLines: Int = 1,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+) {
+    val colors = TFTheme.colors
+    val accentRoles = TFTheme.accentRoles
+    val typography = TFTheme.typography
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 11.dp),
+        verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .padding(top = if (singleLine) 0.dp else 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = accentRoles.accent,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = typography.caption,
+                color = colors.labelSecondary,
+                fontWeight = FontWeight.Medium
+            )
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = singleLine,
+                minLines = minLines,
+                maxLines = maxLines,
+                keyboardOptions = keyboardOptions,
+                textStyle = TextStyle(
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = colors.labelPrimary
+                ),
+                cursorBrush = SolidColor(accentRoles.accentText),
+                decorationBox = { innerTextField ->
+                    if (value.isEmpty() && placeholder.isNotEmpty()) {
+                        Text(
+                            text = placeholder,
+                            style = typography.body,
+                            color = colors.labelSecondary.copy(alpha = 0.45f)
+                        )
+                    }
+                    innerTextField()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp)
+            )
+        }
     }
 }

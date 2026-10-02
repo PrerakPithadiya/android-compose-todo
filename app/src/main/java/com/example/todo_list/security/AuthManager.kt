@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import com.example.todo_list.data.local.AppDatabase
 import com.example.todo_list.data.local.dao.UserDao
 import com.example.todo_list.data.local.entity.UserEntity
+import com.example.todo_list.data.remote.SupabaseClient
 import com.example.todo_list.data.repository.TaskRepository
 import com.example.todo_list.manager.UserProfileManager
 import kotlinx.coroutines.CoroutineScope
@@ -240,12 +241,12 @@ object AuthManager {
         val cleanPhone = phone.trim()
         val cleanEmail = if (email.isBlank()) "${cleanUsername.removePrefix("@").lowercase()}@taskflow.app" else email.trim()
 
-        // Check if username or phone already exists
+        // Check if username or phone already exists locally OR in Supabase Cloud
         val existingByUsername = dao.getUserByUsername(cleanUsername)
-        if (existingByUsername != null) return@withContext false
+        if (existingByUsername != null || SupabaseClient.checkUsernameExists(cleanUsername)) return@withContext false
 
         val existingByPhone = dao.getUserByPhone(cleanPhone)
-        if (existingByPhone != null) return@withContext false
+        if (existingByPhone != null || SupabaseClient.checkPhoneExists(cleanPhone)) return@withContext false
 
         val salt = generateSalt()
         val hash = hashPassword(password, salt)
@@ -263,9 +264,15 @@ object AuthManager {
             lastLoginAt = System.currentTimeMillis()
         )
 
+        // 1. Save locally to Room SQLite
         dao.insertUser(newUser)
 
-        // Seed initial starter tasks for this specific user
+        // 2. Persist to Supabase Cloud Database (survives app uninstalls & multi-device!)
+        CoroutineScope(Dispatchers.IO).launch {
+            SupabaseClient.upsertUser(newUser)
+        }
+
+        // 3. Seed starter tasks for this specific user
         appContext?.let { ctx ->
             TaskRepository.getInstance(ctx).seedStarterTasksForUser(newUserId)
         }
@@ -290,13 +297,28 @@ object AuthManager {
     }
 
     /**
-     * Authenticates user against stored credentials in SQLite 'users' table.
+     * Authenticates user against stored credentials in SQLite 'users' table or Supabase Cloud.
      * Supports login with username (with or without '@') or phone number.
+     * If the app was uninstalled and reinstalled, this pulls the account and all tasks back from the cloud!
      */
     suspend fun login(identifier: String, password: String): Boolean = withContext(Dispatchers.IO) {
         val dao = userDao ?: return@withContext false
         val cleanId = identifier.trim()
-        val user = dao.getUserByIdentifier(cleanId) ?: return@withContext false
+
+        // 1. Check local Room SQLite first
+        var user = dao.getUserByIdentifier(cleanId)
+
+        // 2. If not found locally (e.g. app was uninstalled & reinstalled), query Supabase Cloud!
+        if (user == null) {
+            val cloudUser = SupabaseClient.getUserByIdentifier(cleanId)
+            if (cloudUser != null) {
+                user = cloudUser
+                // Cache restored user back into local Room SQLite
+                dao.insertUser(cloudUser)
+            }
+        }
+
+        if (user == null) return@withContext false
 
         val inputHash = hashPassword(password, user.passwordSalt)
         if (inputHash == user.passwordHash) {
@@ -305,6 +327,12 @@ object AuthManager {
                 ?.putString(KEY_ACTIVE_USER_ID, user.id)
                 ?.putBoolean(KEY_EXPLICIT_LOGOUT, false)
                 ?.commit()
+
+            // 3. Sync and restore all user's tasks from Supabase Cloud!
+            appContext?.let { ctx ->
+                val repo = TaskRepository.getInstance(ctx)
+                repo.syncWithCloud(user.id)
+            }
 
             withContext(Dispatchers.Main) {
                 currentUser = user
@@ -429,30 +457,42 @@ object AuthManager {
         val dao = userDao ?: return@withContext false
         val cleanPhone = phone.trim()
         val user = dao.getUserByPhone(cleanPhone) ?: dao.getUserByIdentifier(cleanPhone)
-        user != null
+        if (user != null) return@withContext true
+        SupabaseClient.checkPhoneExists(cleanPhone)
     }
 
     /**
-     * Checks if a user exists by username or phone.
+     * Checks if a user exists by username or phone locally or in Supabase Cloud.
      */
     suspend fun userExists(identifier: String): Boolean = withContext(Dispatchers.IO) {
         val dao = userDao ?: return@withContext false
         val cleanId = identifier.trim()
         if (cleanId.isEmpty()) return@withContext false
         val user = dao.getUserByIdentifier(cleanId)
-        user != null
+        if (user != null) return@withContext true
+        SupabaseClient.getUserByIdentifier(cleanId) != null
     }
 
     /**
-     * Updates password for the registered account securely in SQLite 'users' table.
+     * Updates password for the registered account securely in SQLite 'users' table and Supabase Cloud.
      */
     suspend fun updatePassword(phoneOrUser: String, newPassword: String): Boolean = withContext(Dispatchers.IO) {
         val dao = userDao ?: return@withContext false
-        val user = dao.getUserByIdentifier(phoneOrUser.trim()) ?: return@withContext false
+        var user = dao.getUserByIdentifier(phoneOrUser.trim())
+        if (user == null) {
+            user = SupabaseClient.getUserByIdentifier(phoneOrUser.trim())
+            if (user != null) {
+                dao.insertUser(user)
+            }
+        }
+        if (user == null) return@withContext false
 
         val newSalt = generateSalt()
         val newHash = hashPassword(newPassword, newSalt)
         dao.updateUserPassword(user.id, newHash, newSalt)
+        CoroutineScope(Dispatchers.IO).launch {
+            SupabaseClient.updateUserPassword(user.id, newHash, newSalt)
+        }
 
         if (currentUser?.id == user.id) {
             val updated = user.copy(passwordHash = newHash, passwordSalt = newSalt)
@@ -477,6 +517,7 @@ object AuthManager {
         CoroutineScope(Dispatchers.IO).launch {
             val dao = AppDatabase.getInstance(ctx).userDao()
             dao.updateUser(updated)
+            SupabaseClient.upsertUser(updated)
         }
         return true
     }
@@ -491,6 +532,7 @@ object AuthManager {
         CoroutineScope(Dispatchers.IO).launch {
             val dao = AppDatabase.getInstance(ctx).userDao()
             dao.updateUserPassword(user.id, newHash, newSalt)
+            SupabaseClient.updateUserPassword(user.id, newHash, newSalt)
         }
         return true
     }

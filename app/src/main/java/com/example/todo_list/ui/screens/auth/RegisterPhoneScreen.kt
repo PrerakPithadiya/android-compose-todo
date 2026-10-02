@@ -51,6 +51,7 @@ fun RegisterPhoneScreen(
     var selectedCountryCode by remember { mutableStateOf("+91") }
     var phoneNumber by remember { mutableStateOf("") }
     var showCountryPicker by remember { mutableStateOf(false) }
+    var isCheckingPhone by remember { mutableStateOf(false) }
 
     val isPhoneValid = remember(phoneNumber) {
         val digits = phoneNumber.filter { it.isDigit() }
@@ -225,17 +226,30 @@ fun RegisterPhoneScreen(
             // Send Verification Code CTA Button
             Button(
                 onClick = {
-                    if (!isPhoneValid) {
-                        HapticManager.performError(context)
-                        Toast.makeText(context, "Please enter a valid phone number", Toast.LENGTH_SHORT).show()
+                    if (!isPhoneValid || isCheckingPhone) {
+                        if (!isPhoneValid) {
+                            HapticManager.performError(context)
+                            Toast.makeText(context, "Please enter a valid phone number", Toast.LENGTH_SHORT).show()
+                        }
                         return@Button
                     }
                     focusManager.clearFocus()
-                    HapticManager.performSuccess(context)
-                    val generatedOtp = AuthManager.sendOtp(fullPhoneNumber)
-                    onCodeSent(fullPhoneNumber, generatedOtp)
+                    isCheckingPhone = true
+                    coroutineScope.launch {
+                        val alreadyRegistered = AuthManager.isRegisteredPhone(fullPhoneNumber)
+                        isCheckingPhone = false
+                        if (alreadyRegistered) {
+                            HapticManager.performSuccess(context)
+                            Toast.makeText(context, "Account already exists! Please log in with your password.", Toast.LENGTH_LONG).show()
+                            onNavigateToLogin()
+                        } else {
+                            HapticManager.performSuccess(context)
+                            val generatedOtp = AuthManager.sendOtp(fullPhoneNumber)
+                            onCodeSent(fullPhoneNumber, generatedOtp)
+                        }
+                    }
                 },
-                enabled = isPhoneValid,
+                enabled = isPhoneValid && !isCheckingPhone,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = SystemBlue,
@@ -246,7 +260,7 @@ fun RegisterPhoneScreen(
                     .height(52.dp)
             ) {
                 Text(
-                    text = "Send Verification Code",
+                    text = if (isCheckingPhone) "Checking Account..." else "Send Verification Code",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White

@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.todo_list.data.local.AppDatabase
 import com.example.todo_list.data.local.entity.UserEntity
+import com.example.todo_list.data.remote.SupabaseClient
 import com.example.todo_list.model.AchievementBadge
 import com.example.todo_list.model.AvatarPreset
 import com.example.todo_list.model.UserProfile
@@ -114,6 +115,18 @@ object UserProfileManager {
                 streak = currentStreak,
                 bestStreak = bestStreak
             )
+            // Push profile changes to Supabase Cloud
+            SupabaseClient.updateUserProfile(
+                userId = user.id,
+                name = profile.name,
+                username = profile.username,
+                email = profile.email,
+                bio = profile.bio,
+                avatarPresetId = profile.avatarPresetId,
+                customAvatarUri = profile.customAvatarUri,
+                focusStatus = profile.focusStatus,
+                dailyGoal = profile.dailyTaskGoal
+            )
         }
     }
 
@@ -130,6 +143,28 @@ object UserProfileManager {
             email = email,
             phone = phone,
             bio = bio
+        )
+        profile = updated
+        syncUserToDatabase()
+    }
+
+    fun saveProfile(
+        name: String = profile.name,
+        username: String = profile.username,
+        email: String = profile.email,
+        phone: String = profile.phone,
+        bio: String = profile.bio,
+        avatarPresetId: Int = profile.avatarPresetId,
+        customAvatarUri: String? = profile.customAvatarUri
+    ) {
+        val updated = profile.copy(
+            name = name,
+            username = username,
+            email = email,
+            phone = phone,
+            bio = bio,
+            avatarPresetId = avatarPresetId,
+            customAvatarUri = customAvatarUri
         )
         profile = updated
         syncUserToDatabase()
@@ -178,8 +213,12 @@ object UserProfileManager {
         }
     }
 
-    fun getAvatarUrl(): String {
-        return profile.customAvatarUri ?: AvatarPreset.getById(profile.avatarPresetId).avatarUrl
+    fun getAvatarUrl(): String? {
+        if (!profile.customAvatarUri.isNullOrBlank()) {
+            return profile.customAvatarUri
+        }
+        val preset = AvatarPreset.PRESETS.find { it.id == profile.avatarPresetId }
+        return preset?.avatarUrl ?: AvatarPreset.PRESETS.firstOrNull()?.avatarUrl
     }
 
     fun getLevel(): Int = (xpPoints / 500) + 1

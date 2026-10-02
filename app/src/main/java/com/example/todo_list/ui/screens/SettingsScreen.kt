@@ -80,7 +80,8 @@ fun SettingsScreen(
     onAccentColorChange: (AppAccentColor) -> Unit = {},
     onClearCompletedTasks: () -> Unit,
     onResetAllData: () -> Unit,
-    onOpenProfile: () -> Unit = {}
+    onOpenProfile: () -> Unit = {},
+    onOpenRetrospective: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -171,7 +172,10 @@ fun SettingsScreen(
                     completedCount = completedCount,
                     completionPercentage = completionPercentage,
                     accentColor = SystemBlue,
-                    onViewDetails = { showStatsSheet = true }
+                    onViewDetails = {
+                        HapticManager.performClick(context)
+                        onOpenRetrospective()
+                    }
                 )
             }
 
@@ -1741,15 +1745,34 @@ fun UserProfileCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            AsyncImage(
-                model = com.example.todo_list.manager.UserProfileManager.getAvatarUrl(),
-                contentDescription = "User Avatar",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .border(1.5.dp, accentColor, CircleShape)
-            )
+            val avatarUrl = com.example.todo_list.manager.UserProfileManager.getAvatarUrl()
+            if (!avatarUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = avatarUrl,
+                    contentDescription = "User Avatar",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .border(1.5.dp, accentColor, CircleShape)
+                )
+            } else {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(com.example.todo_list.ui.theme.SystemGroupedBackground)
+                        .border(1.dp, com.example.todo_list.ui.theme.SystemDivider, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Person,
+                        contentDescription = "User Avatar",
+                        tint = com.example.todo_list.ui.theme.SystemGray,
+                        modifier = Modifier.size(34.dp)
+                    )
+                }
+            }
 
             Column(modifier = Modifier.weight(1f)) {
                 Row(

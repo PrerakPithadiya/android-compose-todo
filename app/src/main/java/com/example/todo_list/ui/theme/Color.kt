@@ -202,6 +202,9 @@ val SystemGray: Color
 val SystemGray2: Color
     @Composable @ReadOnlyComposable get() = LocalTaskFlowColors.current.systemGray2
 
+val SystemGray4: Color
+    @Composable @ReadOnlyComposable get() = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF3A3A3C) else Color(0xFFD1D1D6)
+
 val SystemGray5: Color
     @Composable @ReadOnlyComposable get() = LocalTaskFlowColors.current.systemGray5
 

@@ -170,15 +170,71 @@ TaskFlow is a modern, high-performance task management application for Android, 
   * Dedicated "Floating AI Assistant" switch under the Apple Intelligence card in Settings.
   * Integrated Apple HIG dialog with 1-tap deep link to Android's `ACTION_MANAGE_OVERLAY_PERMISSION` screen and graceful in-app fallback.
 
----
+### 🎯 13. Eisenhower Matrix Prioritization & Action Quadrants
+* **4 Actionable Quadrants**:
+  * **🔴 Do First (Urgent & Important)**: High-leverage, immediate execution tasks due now.
+  * **🔵 Schedule (Important & Not Urgent)**: Strategic planning and long-term milestones.
+  * **🟠 Delegate (Urgent & Not Important)**: Actionable operational tasks suitable for delegation or automation.
+  * **⚪ Eliminate (Not Urgent & Not Important)**: Low-value distractions recommended for deletion or postponement.
+* **Interactive 2x2 Overview Matrix & Filter Modes**:
+  * Seamless switcher between an Apple Inset 2x2 Bento Grid view with live pending counts and individual focused list views.
+  * 1-tap quick quadrant reallocation modal sheet with tactile haptics.
+  * Dedicated "Productivity Tools" entry card in the Lists screen.
+* **Create & Edit Task Integration**:
+  * Native segmented quadrant selectors in `CreateTaskBottomSheet.kt` and `EditTaskBottomSheet.kt` allowing users to categorize tasks directly during quick capture or detailed editing.
 
+### 🍅 14. Integrated Pomodoro Focus Timer & Work/Break Cycles
+* **Customizable Focus Intervals**:
+  * Configurable **Focus** (25 min default), **Short Break** (5 min), and **Long Break** (15 min after 4 focus intervals).
+  * Direct session duration steppers and audio/haptic alert toggles.
+* **Direct Task Association & 1-Tap Completion**:
+  * Bind any task directly to an active Pomodoro focus session.
+  * Complete tasks directly from the focus hub with `+50 XP` reward and celebratory haptics.
+* **Apple Dynamic Island Mini-Banner & Fullscreen Focus Hub**:
+  * Sleek floating pill mini-banner docked right above the navigation tab bar displaying remaining time in monospaced tabular typography, active task name, and play/pause controls.
+  * Full Apple Stopwatch circular dial sheet with smooth spring animations (`PomodoroTimerSheet.kt`).
+
+### 📊 15. Analytics, Reporting & Retrospectives
+* **Structured Category-Wise Period Reviews**:
+  * Real-time analytical retrospectives available in **Weekly** (Last 7 Days) and **Monthly** (Last 30 Days) review cadences via iOS segmented tabs.
+  * Dedicated access points across Lists Screen ("Retrospectives" tool card), Profile Screen (Productivity Analytics bento cells), and Settings ("Productivity Statistics").
+* **Total Work Output Bento Hero**:
+  * **Total Hours Logged**: Dynamic aggregation combining active Pomodoro focus minutes and completed task time metrics.
+  * **Task Completion Rate**: Real-time ratio of completed tasks to total period volume with smooth progress bar.
+  * **Active Focus Sessions**: Aggregated count of completed deep work sessions.
+* **Domain Breakdown (Visual Distribution)**:
+  * Categorizes tasks across 4 core life domains:
+    * 💼 **Professional & Work**: Work, Career, Business, Projects, Client.
+    * 📚 **Study & Learning**: Study, Education, Books, Research, Courses.
+    * 🏋️ **Health & Fitness**: Health, Workout, Gym, Exercise, Nutrition.
+    * 🎨 **Hobbies & Personal**: Personal, Creative, Art, Music, Home, Social.
+  * Stacked proportional multi-segment distribution bar with percentage chips, task tallies, and domain completion rates.
+* **Month-over-Month (MoM) Growth & Trend Analysis**:
+  * Historical period-over-period delta calculation comparing the active window against the preceding comparative window.
+  * Visual comparative progress bars illustrating growth or dip with colored directional delta badges (`+X%` / `-X%`).
+* **Adaptive Motivational Feedback Engine**:
+  * **Growth Detected**: Celebratory milestone badges, unlock achievements, and 1-tap claimable `+150 XP` bonus with celebratory haptics.
+  * **Dip / Rest Detected**: Empathetic, supportive gratitude prompts emphasizing self-compassion, balance, and gentle reactivation without punitive or guilt-inducing messaging.
+* **Apple (iOS HIG) Native Presentation**:
+  * Inset grouped cards (`12dp` radius) with 1px hairline card strokes in dark mode, flat white on `#F2F2F7` in light mode.
+### ☁️ 16. Cloud Synchronization & Cross-Device Account Recovery (Supabase Engine)
+* **Cloud-First User & Data Persistence (`SupabaseClient.kt`)**:
+  * Native asynchronous HTTP synchronization engine with Supabase (PostgreSQL + PostgREST).
+  * Seamless account recovery across app re-installs and device migrations: users simply sign in with their phone/username to restore their profile, biometric keys, active tier, and lists.
+* **Offline-First Room & Cloud Sync Hybrid**:
+  * Local Room SQLite remains the single-source-of-truth for zero latency and offline usage.
+  * Real-time background sync replicates task creations, status toggles, custom categories, and profile achievements to Supabase with automatic retry logic.
+
+---
 
 ## 🛠️ Technology Stack & Dependencies
 
 * **Language**: Kotlin 2.2.10
 * **UI Framework**: Jetpack Compose & Material 3
-* **Database & Persistence**: Android Jetpack Room 2.8.4 (SQLite ORM) with Kotlin Symbol Processing (KSP)
+* **Local Persistence**: Android Jetpack Room 2.8.4 (SQLite ORM) with Kotlin Symbol Processing (KSP)
+* **Cloud Database & Sync**: Supabase (PostgreSQL / PostgREST)
 * **Reactive Streams**: Kotlin Coroutines & Flow
+
 * **Image Loading**: Coil 2.7.0
 * **Authentication**: AndroidX Biometric library
 * **Notifications & Timing**: Android AlarmManager & BroadcastReceivers

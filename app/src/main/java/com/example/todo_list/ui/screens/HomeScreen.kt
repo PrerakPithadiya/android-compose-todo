@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
@@ -78,8 +79,14 @@ import com.example.todo_list.ui.components.CreateCategoryBottomSheet
 import com.example.todo_list.ui.components.IosTimezoneNotificationBanner
 import com.example.todo_list.ui.components.TimezonePickerBottomSheet
 import com.example.todo_list.manager.TimePreferencesManager
+import com.example.todo_list.manager.PomodoroTimerManager
+import com.example.todo_list.model.EisenhowerQuadrant
+import com.example.todo_list.ui.components.pomodoro.PomodoroMiniBanner
+import com.example.todo_list.ui.screens.matrix.EisenhowerMatrixScreen
+import com.example.todo_list.ui.screens.pomodoro.PomodoroTimerSheet
 import com.example.todo_list.utils.TimeFormatHelper
 import com.example.todo_list.ui.screens.profile.ProfileScreen
+import com.example.todo_list.ui.screens.retrospective.AnalyticsRetrospectiveScreen
 import com.example.todo_list.utils.HapticManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -141,6 +148,10 @@ fun HomeScreen(
     var prefilledTaskCategory by remember { mutableStateOf<String?>(null) }
     var showTimezonePickerSheet by remember { mutableStateOf(false) }
     var showIntelligenceSheet by remember { mutableStateOf(false) }
+    var showEisenhowerScreen by remember { mutableStateOf(false) }
+    var showRetrospectiveScreen by remember { mutableStateOf(false) }
+    var showPomodoroSheet by remember { mutableStateOf(false) }
+    var prefilledQuadrant by remember { mutableStateOf<EisenhowerQuadrant?>(null) }
     var intelligenceInitialTab by remember { mutableIntStateOf(0) }
     val aiShortcutTrigger by com.example.todo_list.MainActivity.openAiChatTrigger
 
@@ -224,7 +235,33 @@ fun HomeScreen(
         ProfileScreen(
             taskList = taskList,
             categoriesList = categoriesList,
+            onOpenRetrospective = { showRetrospectiveScreen = true },
             onNavigateBack = { showProfileScreen = false }
+        )
+    } else if (showEisenhowerScreen) {
+        EisenhowerMatrixScreen(
+            taskList = taskList,
+            onToggleComplete = onToggleCompleteHelper,
+            onEditTask = { taskToEdit -> editingTask = taskToEdit },
+            onQuadrantChange = { taskToUpdate, newQuadrant ->
+                coroutineScope.launch {
+                    taskRepository.updateTaskQuadrant(taskToUpdate.id, newQuadrant.key)
+                }
+            },
+            onStartPomodoro = { focusTask ->
+                PomodoroTimerManager.startFocusOnTask(focusTask)
+                showPomodoroSheet = true
+            },
+            onNavigateBack = { showEisenhowerScreen = false },
+            onAddTask = { quadrant ->
+                prefilledQuadrant = quadrant
+                showAddTaskSheet = true
+            }
+        )
+    } else if (showRetrospectiveScreen) {
+        AnalyticsRetrospectiveScreen(
+            taskList = taskList,
+            onNavigateBack = { showRetrospectiveScreen = false }
         )
     } else {
         Scaffold(
@@ -366,6 +403,15 @@ fun HomeScreen(
                 onDeleteCategoryWithMigration = { categoryToDelete, targetCategoryName ->
                     coroutineScope.launch { taskRepository.deleteCategoryWithMigration(categoryToDelete, targetCategoryName, currentUserId) }
                 },
+                onOpenEisenhowerMatrix = {
+                    showEisenhowerScreen = true
+                },
+                onOpenPomodoro = {
+                    showPomodoroSheet = true
+                },
+                onOpenRetrospective = {
+                    showRetrospectiveScreen = true
+                },
                 onOpenAddTaskSheet = { prefilledCategory ->
                     prefilledTaskCategory = prefilledCategory
                     showAddTaskSheet = true
@@ -392,6 +438,9 @@ fun HomeScreen(
                 },
                 onOpenProfile = {
                     showProfileScreen = true
+                },
+                onOpenRetrospective = {
+                    showRetrospectiveScreen = true
                 }
             )
         }
@@ -410,6 +459,14 @@ fun HomeScreen(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = innerPadding.calculateTopPadding())
+        )
+
+        // Apple Dynamic Island Pomodoro Focus Mini Banner docked right above navigation bar
+        PomodoroMiniBanner(
+            onClick = { showPomodoroSheet = true },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = innerPadding.calculateBottomPadding() + 6.dp)
         )
     }
 }
@@ -518,6 +575,16 @@ fun HomeScreen(
         )
     }
 
+    // Pomodoro Focus Timer Sheet
+    if (showPomodoroSheet) {
+        PomodoroTimerSheet(
+            onDismiss = { showPomodoroSheet = false },
+            onCompleteActiveTask = { taskToComplete ->
+                onToggleCompleteHelper(taskToComplete)
+            }
+        )
+    }
+
     // In-App Floating AI Assistant Shortcut Button (Active when enabled without system overlay)
     val isFloatingAiActive = com.example.todo_list.ai.FloatingAiButtonManager.isFloatingEnabled
     val hasSystemOverlay = remember(isFloatingAiActive) {
@@ -613,7 +680,7 @@ fun IntelligenceInsightCard(
 
 @Composable
 fun HeaderBar(
-    avatarUrl: String = UserProfileManager.getAvatarUrl(),
+    avatarUrl: String? = UserProfileManager.getAvatarUrl(),
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onAddTaskClick: () -> Unit,
@@ -683,19 +750,41 @@ fun HeaderBar(
                         )
                     }
 
-                    AsyncImage(
-                        model = avatarUrl,
-                        contentDescription = "User Avatar",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .border(0.5.dp, SystemDivider, CircleShape)
-                            .clickable {
-                                HapticManager.performClick(context)
-                                onProfileClick()
-                            }
-                    )
+                    if (!avatarUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = avatarUrl,
+                            contentDescription = "User Avatar",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .border(0.5.dp, SystemDivider, CircleShape)
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    onProfileClick()
+                                }
+                        )
+                    } else {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(SystemGroupedBackground)
+                                .border(0.5.dp, SystemDivider, CircleShape)
+                                .clickable {
+                                    HapticManager.performClick(context)
+                                    onProfileClick()
+                                }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Person,
+                                contentDescription = "User Avatar",
+                                tint = SystemGray,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
             }
 
