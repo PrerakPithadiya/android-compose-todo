@@ -16,20 +16,24 @@ jobs:
   build:
     name: Build & Distribute
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
           cache: 'gradle'
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: Run Unit Tests
+        run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
@@ -41,8 +45,8 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK to Firebase App Distribution
-        # Only runs if FIREBASE_APP_ID is configured in repository secrets
-        if: env.FIREBASE_APP_ID != ''
+        # Only runs if FIREBASE_APP_ID and credentials are configured in repository secrets
+        if: ${{ secrets.FIREBASE_APP_ID != '' && secrets.FIREBASE_SERVICE_CREDENTIALS != '' }}
         uses: wzieba/Firebase-Distribution-Github-Action@v1
         with:
           appId: ${{ secrets.FIREBASE_APP_ID }}
@@ -50,5 +54,3 @@ jobs:
           groups: testers
           file: app/build/outputs/apk/debug/app-debug.apk
           releaseNotes: ${{ github.event.inputs.release_notes || github.event.head_commit.message || 'New build update' }}
-        env:
-          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
