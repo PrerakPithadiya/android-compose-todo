@@ -49,6 +49,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /**
  * Next-Level Apple (iOS HIG) Edit Task Bottom Sheet.
@@ -186,6 +187,9 @@ fun EditTaskBottomSheet(
         }
     }
 
+    // Coroutine scope for sheet state animations (show/hide)
+    val sheetScope = rememberCoroutineScope()
+
     val handleDismissAttempt = {
         if (hasChanges) {
             showDiscardConfirmation = true
@@ -205,10 +209,29 @@ fun EditTaskBottomSheet(
         )
     }
 
+    // Sheet state with confirmValueChange guard: blocks the sheet from hiding
+    // when there are unsaved changes, showing the discard dialog instead.
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { newValue ->
+            if (newValue == SheetValue.Hidden && hasChanges) {
+                // Block the sheet from closing and show the discard confirmation instead
+                showDiscardConfirmation = true
+                false // reject the state change — sheet stays visible
+            } else {
+                true // allow the state change
+            }
+        }
+    )
+
     // Discard Confirmation Dialog
     if (showDiscardConfirmation) {
         AlertDialog(
-            onDismissRequest = { showDiscardConfirmation = false },
+            onDismissRequest = {
+                // Dismissing the alert (e.g. tapping outside it) = keep editing
+                showDiscardConfirmation = false
+                sheetScope.launch { sheetState.show() }
+            },
             title = {
                 Text(
                     text = "Discard Changes?",
@@ -227,7 +250,19 @@ fun EditTaskBottomSheet(
                 TextButton(
                     onClick = {
                         showDiscardConfirmation = false
-                        onDismiss()
+                        // Reset fields so confirmValueChange won't block hide()
+                        taskTitle = initialTitleParts.first
+                        taskNotes = initialTitleParts.second
+                        selectedCategory = task.category
+                        selectedDate = task.date
+                        selectedTime = TimeFormatHelper.formatTimeForDisplay(task.time, is24Hour)
+                        selectedPriority = task.priority
+                        selectedQuadrant = task.eisenhowerQuadrant
+                        estimatedPomodoroSessions = task.pomodoroEstimatedSessions
+                        sheetScope.launch {
+                            sheetState.hide()
+                            onDismiss()
+                        }
                     }
                 ) {
                     Text(
@@ -239,7 +274,11 @@ fun EditTaskBottomSheet(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDiscardConfirmation = false }) {
+                TextButton(onClick = {
+                    showDiscardConfirmation = false
+                    // Ensure the sheet is fully visible again
+                    sheetScope.launch { sheetState.show() }
+                }) {
                     Text(
                         text = "Keep Editing",
                         style = typography.body,
@@ -299,8 +338,6 @@ fun EditTaskBottomSheet(
             shape = TFShape.button
         )
     }
-
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = { handleDismissAttempt() },

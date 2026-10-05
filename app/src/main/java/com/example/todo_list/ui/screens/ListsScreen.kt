@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -103,6 +104,21 @@ fun ListsScreen(
     }
 
     val context = LocalContext.current
+
+    // Handle system back button for sheets and dialogs
+    BackHandler(enabled = true) {
+        when {
+            showCreateListSheet -> showCreateListSheet = false
+            categoryPendingDelete != null -> categoryPendingDelete = null
+            pendingMigrationFromCategory != null -> pendingMigrationFromCategory = null
+            selectedSmartFilter != null -> selectedSmartFilter = null
+            searchQuery.isNotBlank() -> searchQuery = ""
+            else -> {
+                // Let the default behavior happen (exit app or go back to previous tab)
+                (context as? androidx.activity.ComponentActivity)?.onBackPressed()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier

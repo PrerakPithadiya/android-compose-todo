@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -81,6 +82,14 @@ fun EisenhowerMatrixScreen(
     }
     val eliminateTasks = remember(taskList) {
         taskList.filter { it.getEisenhowerQuadrantEnum() == EisenhowerQuadrant.ELIMINATE }
+    }
+
+    // Handle system back button
+    BackHandler(enabled = true) {
+        when {
+            taskToMoveQuadrant != null -> taskToMoveQuadrant = null
+            else -> onNavigateBack()
+        }
     }
 
     Scaffold(

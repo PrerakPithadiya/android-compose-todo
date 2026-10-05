@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -65,6 +66,11 @@ fun AnalyticsRetrospectiveScreen(
             tasks = taskList,
             period = selectedPeriod
         )
+    }
+
+    // Handle system back button
+    BackHandler(enabled = true) {
+        onNavigateBack()
     }
 
     Scaffold(

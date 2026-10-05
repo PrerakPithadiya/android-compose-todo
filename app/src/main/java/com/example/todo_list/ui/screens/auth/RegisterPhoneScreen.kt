@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -60,6 +61,14 @@ fun RegisterPhoneScreen(
 
     val fullPhoneNumber = remember(selectedCountryCode, phoneNumber) {
         "$selectedCountryCode ${phoneNumber.trim()}"
+    }
+
+    // Handle system back button for sheets
+    BackHandler(enabled = true) {
+        when {
+            showCountryPicker -> showCountryPicker = false
+            else -> onNavigateToLogin()
+        }
     }
 
     Column(

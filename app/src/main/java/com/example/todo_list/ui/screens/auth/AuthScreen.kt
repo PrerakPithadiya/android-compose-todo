@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.BackHandler
 import com.example.todo_list.security.AuthManager
 import com.example.todo_list.ui.components.auth.IosNotificationBanner
 import com.example.todo_list.ui.theme.SystemGroupedBackground
@@ -45,6 +47,27 @@ fun AuthScreen(
             currentStep = AuthFlowStep.LOGIN
         } else if (!AuthManager.isAccountCreated && currentStep == AuthFlowStep.LOGIN) {
             currentStep = AuthFlowStep.REGISTER_PHONE
+        }
+    }
+
+    val context = LocalContext.current
+
+    // Handle system back button for auth flow navigation
+    BackHandler(enabled = true) {
+        when (currentStep) {
+            AuthFlowStep.LOGIN -> {
+                // Allow exiting app on login screen
+                (context as? androidx.activity.ComponentActivity)?.onBackPressed()
+            }
+            AuthFlowStep.REGISTER_PHONE -> {
+                currentStep = AuthFlowStep.LOGIN
+            }
+            AuthFlowStep.OTP_VERIFICATION -> {
+                currentStep = AuthFlowStep.REGISTER_PHONE
+            }
+            AuthFlowStep.ACCOUNT_SETUP -> {
+                // Don't allow back from account setup
+            }
         }
     }
 

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -98,6 +99,25 @@ fun ProfileScreen(
     // Syncing animation state
     var isSyncing by remember { mutableStateOf(false) }
     val syncRotation = remember { Animatable(0f) }
+
+    // Handle system back button
+    BackHandler(enabled = true) {
+        when {
+            showSignOutDialog -> showSignOutDialog = false
+            showResetProfileDialog -> showResetProfileDialog = false
+            showXpInfoDialog -> showXpInfoDialog = false
+            showEditProfileSheet -> showEditProfileSheet = false
+            showPhotoViewerDialog -> showPhotoViewerDialog = false
+            showChangeUsernameDialog -> showChangeUsernameDialog = false
+            showChangePasswordSheet -> showChangePasswordSheet = false
+            showDigitalCardSheet -> showDigitalCardSheet = false
+            selectedBadgeForDetail != null -> selectedBadgeForDetail = null
+            showFocusStatusPicker -> showFocusStatusPicker = false
+            showDailyGoalSheet -> showDailyGoalSheet = false
+            showMorningDigestSheet -> showMorningDigestSheet = false
+            else -> onNavigateBack()
+        }
+    }
 
     Column(
         modifier = Modifier

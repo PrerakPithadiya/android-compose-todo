@@ -54,6 +54,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /**
  * Panels that can expand inline in Quick Capture mode (Stage 1).
@@ -226,8 +227,16 @@ fun CreateTaskBottomSheet(
         }
     }
 
+    // Coroutine scope for sheet state animations (show/hide)
+    val sheetScope = rememberCoroutineScope()
+
+    // Track whether unsaved content exists (used by confirmValueChange below)
+    val hasUnsavedContent by remember {
+        derivedStateOf { taskTitle.isNotBlank() || taskNotes.isNotBlank() }
+    }
+
     val handleDismissAttempt = {
-        if (taskTitle.isNotBlank() || taskNotes.isNotBlank()) {
+        if (hasUnsavedContent) {
             showDiscardConfirmation = true
         } else {
             onDismiss()
@@ -245,10 +254,29 @@ fun CreateTaskBottomSheet(
         )
     }
 
+    // Sheet state with confirmValueChange guard: blocks the sheet from hiding
+    // when unsaved content exists, showing the discard dialog instead.
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { newValue ->
+            if (newValue == SheetValue.Hidden && hasUnsavedContent) {
+                // Block the sheet from closing and show the discard confirmation instead
+                showDiscardConfirmation = true
+                false // reject the state change — sheet stays visible
+            } else {
+                true // allow the state change
+            }
+        }
+    )
+
     // Discard Changes Confirmation Action Sheet (Section 11.2)
     if (showDiscardConfirmation) {
         AlertDialog(
-            onDismissRequest = { showDiscardConfirmation = false },
+            onDismissRequest = {
+                // Dismissing the alert (e.g. tapping outside it) = keep editing
+                showDiscardConfirmation = false
+                sheetScope.launch { sheetState.show() }
+            },
             title = {
                 Text(
                     text = "Discard Unsaved Task?",
@@ -267,7 +295,13 @@ fun CreateTaskBottomSheet(
                 TextButton(
                     onClick = {
                         showDiscardConfirmation = false
-                        onDismiss()
+                        // Clear content so confirmValueChange won't block hide()
+                        taskTitle = ""
+                        taskNotes = ""
+                        sheetScope.launch {
+                            sheetState.hide()
+                            onDismiss()
+                        }
                     }
                 ) {
                     Text(
@@ -279,7 +313,11 @@ fun CreateTaskBottomSheet(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDiscardConfirmation = false }) {
+                TextButton(onClick = {
+                    showDiscardConfirmation = false
+                    // Ensure the sheet is fully visible again
+                    sheetScope.launch { sheetState.show() }
+                }) {
                     Text(
                         text = "Keep Editing",
                         style = typography.body,
@@ -291,8 +329,6 @@ fun CreateTaskBottomSheet(
             shape = TFShape.button
         )
     }
-
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = { handleDismissAttempt() },

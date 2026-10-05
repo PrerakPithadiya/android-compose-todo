@@ -31,6 +31,7 @@ import com.example.todo_list.ai.FloatingAiButtonManager
 import com.example.todo_list.ui.components.ai.FloatingAiCustomizeSheet
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -134,6 +135,34 @@ fun SettingsScreen(
     val completedCount = remember(taskList) { taskList.count { it.isCompleted } }
     val completionPercentage = remember(totalTasks, completedCount) {
         if (totalTasks > 0) (completedCount.toFloat() / totalTasks * 100).toInt() else 0
+    }
+
+    // Handle system back button for sheets and dialogs
+    BackHandler(enabled = true) {
+        when {
+            showManageCategoriesSheet -> showManageCategoriesSheet = false
+            showCreateCategorySheet -> showCreateCategorySheet = false
+            showCategoryPickerSheet -> showCategoryPickerSheet = false
+            showTimePickerSheet -> showTimePickerSheet = false
+            showAutoArchiveSheet -> showAutoArchiveSheet = false
+            showAppIconSheet -> showAppIconSheet = false
+            showClearCompletedDialog -> showClearCompletedDialog = false
+            showResetDataDialog -> showResetDataDialog = false
+            showLogoutDialog -> showLogoutDialog = false
+            showStatsSheet -> showStatsSheet = false
+            showTimezonePickerSheet -> showTimezonePickerSheet = false
+            showOverlayPermissionDialog -> showOverlayPermissionDialog = false
+            showFloatingAiCustomizeSheet -> showFloatingAiCustomizeSheet = false
+            showAppLockSetupSheet -> showAppLockSetupSheet = false
+            showLockTimeoutSheet -> showLockTimeoutSheet = false
+            showEnrollBiometricDialog -> showEnrollBiometricDialog = false
+            showChangePasswordSheet -> showChangePasswordSheet = false
+            showEditProfileSheet -> showEditProfileSheet = false
+            else -> {
+                // Let the default behavior happen (exit app or go back to previous tab)
+                (context as? androidx.activity.ComponentActivity)?.onBackPressed()
+            }
+        }
     }
 
     Column(

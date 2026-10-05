@@ -26,6 +26,7 @@ TaskFlow is a modern, high-performance task management application for Android, 
   * **Large Title Navigation Bar (`TFLargeTitleNavBar`)**: Collapsing Large Title header with blur effect.
   * **5-Slot Docked Tab Bar (`TFTabBar`)**: 56dp height + gesture insets with center-docked 52dp Plus button rising 8dp above the bar without floating FAB clutter.
 * **Progressive-Disclosure Create & Edit Sheets**: 2-stage progressive disclosure where Stage 1 is Quick Capture (auto-height, immediate keyboard focus, live on-device NLP schedule token extraction with removable chips, docked toolbar) and Stage 2 expands on drag-up to a full Inset Grouped form with inline calendar and clock accordions.
+* **Unsaved Changes Dismissal Guard**: Modal sheet state `confirmValueChange` protection in `CreateTaskBottomSheet.kt` and `EditTaskBottomSheet.kt` preventing accidental swipe-to-dismiss when uncommitted title/notes/modifications exist, smoothly prompting an Apple-styled discard confirmation dialog (`Keep Editing` / `Discard`).
 * **900ms Task Completion Sequence**: Choreographed animation sequence featuring 180ms check draw + ring fill, title strikethrough ease, radial micro-confetti burst, `+50 XP` floating capsule, and placement animation to completed group with instant cancel/undo affordance.
 * **Dark Mode 1px Hairline Card Separation**: 1px physical hairline `cardStroke` (`#545458` @ 55%) border over `#1C1C1E` dark cards against pure black `#000000` canvas to prevent card blending; flat white on `#F2F2F7` without borders or shadows in light mode.
 
@@ -225,6 +226,19 @@ TaskFlow is a modern, high-performance task management application for Android, 
   * Local Room SQLite remains the single-source-of-truth for zero latency and offline usage.
   * Real-time background sync replicates task creations, status toggles, custom categories, and profile achievements to Supabase with automatic retry logic.
 
+### 🧭 17. Predictive Back Navigation & Hierarchical Dismissal Handlers
+* **Comprehensive `BackHandler` Architecture**: Contextual back gesture and system back button handling across all primary and nested composables (`HomeScreen`, `ListsScreen`, `SettingsScreen`, `AuthScreen`, `LoginScreen`, `RegisterPhoneScreen`, `OtpVerificationScreen`, `EisenhowerMatrixScreen`, `ProfileScreen`, `AnalyticsRetrospectiveScreen`).
+* **Hierarchical Dismissal Priority**:
+  * **Level 1 (Sub-Sheets & Pickers)**: Automatically collapses active dialogs, date/time pickers, category management sheets, or modal overlays without closing parent views.
+  * **Level 2 (Active Searches & Filters)**: Clears active search queries and filter selections upon pressing back.
+  * **Level 3 (Nested Screens)**: Smoothly transitions back to previous navigation tiers before delegating to default system finish/exit actions.
+* **Auth Step Navigation**: Supports seamless step-back navigation across phone input, OTP verification, and login flows while safeguarding initialization steps against accidental cancellation.
+
+### 🚀 18. Automated CI/CD Pipeline & Firebase App Distribution
+* **GitHub Actions Workflow (`.github/workflows/distribution.yml`)**: Fully automated continuous integration and delivery pipeline triggered on pushes and pull requests to `main`.
+* **Automated Quality Verification**: Automatically sets up JDK 17, caches Gradle dependencies, and executes `./gradlew testDebugUnitTest` prior to artifact bundling.
+* **Automated Distribution**: Assembles production/debug APKs and automatically pushes builds to Firebase App Distribution with dynamic commit-derived release notes and automated tester group notifications.
+
 ---
 
 ## 🛠️ Technology Stack & Dependencies
@@ -234,7 +248,7 @@ TaskFlow is a modern, high-performance task management application for Android, 
 * **Local Persistence**: Android Jetpack Room 2.8.4 (SQLite ORM) with Kotlin Symbol Processing (KSP)
 * **Cloud Database & Sync**: Supabase (PostgreSQL / PostgREST)
 * **Reactive Streams**: Kotlin Coroutines & Flow
-
+* **CI/CD & Deployment**: GitHub Actions & Firebase App Distribution
 * **Image Loading**: Coil 2.7.0
 * **Authentication**: AndroidX Biometric library
 * **Notifications & Timing**: Android AlarmManager & BroadcastReceivers

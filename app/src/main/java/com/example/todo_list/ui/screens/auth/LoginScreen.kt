@@ -29,6 +29,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -192,6 +193,18 @@ fun LoginScreen(
     val triggerManualLogin = {
         if (isFormValid && !isLoggingIn) {
             performLoginWithCredentials(identifier, password)
+        }
+    }
+
+    // Handle system back button for sheets and dialogs
+    BackHandler(enabled = true) {
+        when {
+            showDeleteConfirmDialog -> showDeleteConfirmDialog = false
+            showForgotPasswordSheet -> showForgotPasswordSheet = false
+            else -> {
+                // Allow exiting app on login screen
+                (context as? androidx.activity.ComponentActivity)?.onBackPressed()
+            }
         }
     }
 

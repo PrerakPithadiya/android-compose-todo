@@ -49,6 +49,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -155,6 +156,11 @@ fun HomeScreen(
     var intelligenceInitialTab by remember { mutableIntStateOf(0) }
     val aiShortcutTrigger by com.example.todo_list.MainActivity.openAiChatTrigger
 
+    // Reset to home tab on app launch
+    LaunchedEffect(Unit) {
+        selectedTab = 0
+    }
+
     LaunchedEffect(aiShortcutTrigger) {
         if (aiShortcutTrigger != null) {
             intelligenceInitialTab = 2
@@ -230,6 +236,47 @@ fun HomeScreen(
     val completedTasks = remember(sortedTaskList) { sortedTaskList.count { it.isCompleted } }
     val remainingTasks = remember(totalTasks, completedTasks) { totalTasks - completedTasks }
     val progressRatio = remember(totalTasks, completedTasks) { if (totalTasks > 0) completedTasks.toFloat() / totalTasks else 0f }
+
+    // Handle system back button navigation
+    BackHandler(enabled = true) {
+        when {
+            showProfileScreen -> {
+                showProfileScreen = false
+            }
+            showEisenhowerScreen -> {
+                showEisenhowerScreen = false
+            }
+            showRetrospectiveScreen -> {
+                showRetrospectiveScreen = false
+            }
+            showAddTaskSheet -> {
+                showAddTaskSheet = false
+                prefilledTaskCategory = null
+            }
+            showViewAllSheet -> {
+                showViewAllSheet = false
+            }
+            editingTask != null -> {
+                editingTask = null
+            }
+            showTimezonePickerSheet -> {
+                showTimezonePickerSheet = false
+            }
+            showIntelligenceSheet -> {
+                showIntelligenceSheet = false
+            }
+            showPomodoroSheet -> {
+                showPomodoroSheet = false
+            }
+            searchQuery.isNotBlank() -> {
+                searchQuery = ""
+            }
+            else -> {
+                // Let the default behavior happen (exit app)
+                (context as? androidx.activity.ComponentActivity)?.onBackPressed()
+            }
+        }
+    }
 
     if (showProfileScreen) {
         ProfileScreen(

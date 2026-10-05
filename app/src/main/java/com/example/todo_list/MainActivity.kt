@@ -38,6 +38,8 @@ import com.example.todo_list.ui.theme.TaskFlowTheme
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Clear saved instance state to ensure app always starts on home tab
+        savedInstanceState?.clear()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         TaskNotificationScheduler.createNotificationChannel(this)
@@ -179,3 +181,4 @@ class MainActivity : FragmentActivity() {
     }
 }
 
+// this is the main file and alse have to optional and for that we have to use some other package....???

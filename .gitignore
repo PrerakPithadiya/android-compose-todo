@@ -13,11 +13,11 @@ app_screenshots/
 issues/
 .externalNativeBuild
 .cxx
-local.properties
-node_modules/
-package.json
-package-lock.json
+/local.properties
+hs_err_*.log
 
-
-
-
+# Firebase & Keystores
+google-services.json
+firebase-app-distribution-key.json
+*.keystore
+*.jks

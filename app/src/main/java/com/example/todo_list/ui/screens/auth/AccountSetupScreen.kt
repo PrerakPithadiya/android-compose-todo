@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -83,6 +84,11 @@ fun AccountSetupScreen(
         if (hasSpecialOrUpper) score++
         if (password.length >= 12) score++
         score
+    }
+
+    // Handle system back button - prevent exiting during account setup
+    BackHandler(enabled = true) {
+        // Don't allow back button during account setup
     }
 
     Column(
